@@ -285,6 +285,7 @@ func Init() {
 			CARevocationLists:  []string{},
 		},
 		WebDAVD: webdavd.Configuration{
+			Custom_root:        "",
 			Bindings:           []webdavd.Binding{defaultWebDAVDBinding},
 			CertificateFile:    "",
 			CertificateKeyFile: "",
@@ -2046,6 +2047,7 @@ func setViperDefaults() {
 	viper.SetDefault("ftpd.certificate_key_file", globalConf.FTPD.CertificateKeyFile)
 	viper.SetDefault("ftpd.ca_certificates", globalConf.FTPD.CACertificates)
 	viper.SetDefault("ftpd.ca_revocation_lists", globalConf.FTPD.CARevocationLists)
+	viper.SetDefault("webdavd.custom_root", globalConf.WebDAVD.Custom_root)
 	viper.SetDefault("webdavd.certificate_file", globalConf.WebDAVD.CertificateFile)
 	viper.SetDefault("webdavd.certificate_key_file", globalConf.WebDAVD.CertificateKeyFile)
 	viper.SetDefault("webdavd.ca_certificates", globalConf.WebDAVD.CACertificates)

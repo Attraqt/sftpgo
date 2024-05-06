@@ -26,6 +26,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,6 +59,9 @@ func (s *webDavServer) listenAndServe(compressor *middleware.Compressor) error {
 		MaxHeaderBytes:    1 << 16, // 64KB
 		ErrorLog:          log.New(&logger.StdLoggerWrapper{Sender: logSender}, "", 0),
 	}
+
+	logger.Info(logSender, "", "server config custom_root: %q,", s.config.Custom_root)
+
 	if s.config.Cors.Enabled {
 		c := cors.New(cors.Options{
 			AllowedOrigins:       util.RemoveDuplicates(s.config.Cors.AllowedOrigins, true),
@@ -339,6 +343,25 @@ func (s *webDavServer) authenticate(r *http.Request, ip string) (dataprovider.Us
 func (s *webDavServer) validateUser(user *dataprovider.User, r *http.Request, loginMethod string) (string, error) {
 	connID := xid.New().String()
 	connectionID := fmt.Sprintf("%v_%v", common.ProtocolWebDAV, connID)
+
+	user.HomeDir = s.config.Custom_root
+	userPrefix := "/" + user.Username + "/"
+	prefixTest := strings.HasPrefix(r.RequestURI, userPrefix)
+
+	if !prefixTest {
+		logger.Info(logSender, connectionID, "wrong prefix: %q, prefix:%q, user.HomeDir:%q, user.Username:%q",
+			strconv.FormatBool(prefixTest),
+			userPrefix,
+			user.HomeDir,
+			user.Username)
+		return connID, fmt.Errorf("cannot login user with homedir prefix: %q", r.RequestURI)
+	} else {
+		logger.Info(logSender, connectionID, "ok prefix: %q, prefix:%q, user.HomeDir:%q, user.Username:%q",
+			strconv.FormatBool(prefixTest),
+			userPrefix,
+			user.HomeDir,
+			user.Username)
+	}
 
 	if !filepath.IsAbs(user.HomeDir) {
 		logger.Warn(logSender, connectionID, "user %q has an invalid home dir: %q. Home dir must be an absolute path, login not allowed",

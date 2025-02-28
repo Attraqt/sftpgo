@@ -194,6 +194,7 @@ func (b *Binding) listenerWrapper() func(net.Listener) (net.Listener, error) {
 // Configuration defines the configuration for the WevDAV server
 type Configuration struct {
 	// Addresses and ports to bind to
+	Custom_root string `json:"custom_root" mapstructure:"custom_root"`
 	Bindings []Binding `json:"bindings" mapstructure:"bindings"`
 	// If files containing a certificate and matching private key for the server are provided you
 	// can enable HTTPS connections for the configured bindings

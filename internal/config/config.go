@@ -303,6 +303,7 @@ func Init() {
 			CARevocationLists:  []string{},
 		},
 		WebDAVD: webdavd.Configuration{
+		    Custom_root:        "",
 			Bindings:           []webdavd.Binding{defaultWebDAVDBinding},
 			CertificateFile:    "",
 			CertificateKeyFile: "",
@@ -2035,6 +2036,7 @@ func getCommandConfigsFromEnv(idx int) {
 }
 
 func setViperDefaults() {
+    viper.SetDefault("webdavd.custom_root", globalConf.WebDAVD.Custom_root)
 	viper.SetDefault("common.idle_timeout", globalConf.Common.IdleTimeout)
 	viper.SetDefault("common.upload_mode", globalConf.Common.UploadMode)
 	viper.SetDefault("common.actions.execute_on", globalConf.Common.Actions.ExecuteOn)

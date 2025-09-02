@@ -17,7 +17,7 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-22.04
+          - ubuntu-latest
         docker_pkg:
           - debian
           - alpine
@@ -25,15 +25,15 @@ jobs:
           - true
           - false
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             docker_pkg: distroless
             optional_deps: false
-          - os: ubuntu-22.04
+          - os: ubuntu-latest
             docker_pkg: debian-plugins
             optional_deps: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Gather image information
         id: info

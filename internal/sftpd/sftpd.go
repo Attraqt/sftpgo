@@ -31,16 +31,16 @@ const (
 
 var (
 	supportedSSHCommands = []string{"scp", "md5sum", "sha1sum", "sha256sum", "sha384sum", "sha512sum", "cd", "pwd",
-		"git-receive-pack", "git-upload-pack", "git-upload-archive", "rsync", "sftpgo-copy", "sftpgo-remove"}
+		"rsync", "sftpgo-copy", "sftpgo-remove"}
 	defaultSSHCommands = []string{"md5sum", "sha1sum", "sha256sum", "cd", "pwd", "scp"}
 	sshHashCommands    = []string{"md5sum", "sha1sum", "sha256sum", "sha384sum", "sha512sum"}
-	systemCommands     = []string{"git-receive-pack", "git-upload-pack", "git-upload-archive", "rsync"}
+	systemCommands     = []string{"rsync"}
 	serviceStatus      ServiceStatus
 	certKeyAlgoNames   = map[string]string{
 		ssh.CertAlgoRSAv01:         ssh.KeyAlgoRSA,
 		ssh.CertAlgoRSASHA256v01:   ssh.KeyAlgoRSASHA256,
 		ssh.CertAlgoRSASHA512v01:   ssh.KeyAlgoRSASHA512,
-		ssh.InsecureCertAlgoDSAv01: ssh.InsecureKeyAlgoDSA,
+		ssh.InsecureCertAlgoDSAv01: ssh.InsecureKeyAlgoDSA, //nolint:staticcheck
 		ssh.CertAlgoECDSA256v01:    ssh.KeyAlgoECDSA256,
 		ssh.CertAlgoECDSA384v01:    ssh.KeyAlgoECDSA384,
 		ssh.CertAlgoECDSA521v01:    ssh.KeyAlgoECDSA521,

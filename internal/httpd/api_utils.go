@@ -161,7 +161,7 @@ func getURLPath(r *http.Request) string {
 func getCommaSeparatedQueryParam(r *http.Request, key string) []string {
 	var result []string
 
-	for _, val := range strings.Split(r.URL.Query().Get(key), ",") {
+	for val := range strings.SplitSeq(r.URL.Query().Get(key), ",") {
 		val = strings.TrimSpace(val)
 		if val != "" {
 			result = append(result, val)
@@ -217,7 +217,9 @@ func handleCloseConnection(w http.ResponseWriter, r *http.Request) {
 		sendAPIResponse(w, r, nil, http.StatusText(status), status)
 		return
 	}
-	if err := n.SendDeleteRequest(claims.Username, claims.Role, fmt.Sprintf("%s/%s", activeConnectionsPath, connectionID)); err != nil {
+	perms := []string{dataprovider.PermAdminCloseConnections}
+	uri := fmt.Sprintf("%s/%s", activeConnectionsPath, connectionID)
+	if err := n.SendDeleteRequest(claims.Username, claims.Role, uri, perms); err != nil {
 		logger.Warn(logSender, "", "unable to delete connection id %q from node %q: %v", connectionID, n.Name, err)
 		sendAPIResponse(w, r, nil, "Not Found", http.StatusNotFound)
 		return
@@ -243,7 +245,8 @@ func getNodesConnections(admin, role string) []common.ConnectionStatus {
 			defer wg.Done()
 
 			var stats []common.ConnectionStatus
-			if err := node.SendGetRequest(admin, role, activeConnectionsPath, &stats); err != nil {
+			perms := []string{dataprovider.PermAdminViewConnections}
+			if err := node.SendGetRequest(admin, role, activeConnectionsPath, perms, &stats); err != nil {
 				logger.Warn(logSender, "", "unable to get connections from node %s: %v", node.Name, err)
 				return
 			}
@@ -732,7 +735,7 @@ func updateLoginMetrics(user *dataprovider.User, loginMethod, ip string, err err
 	dataprovider.ExecutePostLoginHook(user, loginMethod, ip, protocol, err)
 }
 
-func checkHTTPClientUser(user *dataprovider.User, r *http.Request, connectionID string, checkSessions bool) error {
+func checkHTTPClientUser(user *dataprovider.User, r *http.Request, connectionID string, checkSessions, isOIDCLogin bool) error {
 	if slices.Contains(user.Filters.DeniedProtocols, common.ProtocolHTTP) {
 		logger.Info(logSender, connectionID, "cannot login user %q, protocol HTTP is not allowed", user.Username)
 		return util.NewI18nError(
@@ -740,7 +743,7 @@ func checkHTTPClientUser(user *dataprovider.User, r *http.Request, connectionID 
 			util.I18nErrorProtocolForbidden,
 		)
 	}
-	if !isLoggedInWithOIDC(r) && !user.IsLoginMethodAllowed(dataprovider.LoginMethodPassword, common.ProtocolHTTP) {
+	if !isLoggedInWithOIDC(r) && !isOIDCLogin && !user.IsLoginMethodAllowed(dataprovider.LoginMethodPassword, common.ProtocolHTTP) {
 		logger.Info(logSender, connectionID, "cannot login user %q, password login method is not allowed", user.Username)
 		return util.NewI18nError(
 			fmt.Errorf("login method password is not allowed for user %q", user.Username),
@@ -784,7 +787,7 @@ func getActiveUser(username string, r *http.Request) (dataprovider.User, error) 
 	if err := user.CheckLoginConditions(); err != nil {
 		return user, util.NewRecordNotFoundError(fmt.Sprintf("user %q cannot login: %v", username, err))
 	}
-	if err := checkHTTPClientUser(&user, r, xid.New().String(), false); err != nil {
+	if err := checkHTTPClientUser(&user, r, xid.New().String(), false, false); err != nil {
 		return user, util.NewRecordNotFoundError(fmt.Sprintf("user %q cannot login: %v", username, err))
 	}
 	return user, nil
@@ -945,4 +948,13 @@ func hideConfidentialData(claims *jwtTokenClaims, r *http.Request) bool {
 		return true
 	}
 	return r.URL.Query().Get("confidential_data") != "1"
+}
+
+func responseControllerDeadlines(rc *http.ResponseController, read, write time.Time) {
+	if err := rc.SetReadDeadline(read); err != nil {
+		logger.Error(logSender, "", "unable to set read timeout to %s: %v", read, err)
+	}
+	if err := rc.SetWriteDeadline(write); err != nil {
+		logger.Error(logSender, "", "unable to set write timeout to %s: %v", write, err)
+	}
 }

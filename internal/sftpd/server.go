@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/pkg/sftp"
+	"github.com/rs/xid"
 	"github.com/sftpgo/sdk/plugin/notifier"
 	"golang.org/x/crypto/ssh"
 
@@ -130,7 +131,7 @@ type Configuration struct {
 	// preference order.
 	KexAlgorithms []string `json:"kex_algorithms" mapstructure:"kex_algorithms"`
 	// MinDHGroupExchangeKeySize defines the minimum key size to allow for the
-	// key exchanges when using diffie-ellman-group-exchange-sha1 or sha256 key
+	// key exchanges when using diffie-hellman-group-exchange-sha1 or sha256 key
 	// exchange algorithms.
 	MinDHGroupExchangeKeySize int `json:"min_dh_group_exchange_key_size" mapstructure:"min_dh_group_exchange_key_size"`
 	// Ciphers specifies the ciphers allowed
@@ -327,7 +328,7 @@ func (c *Configuration) Initialize(configDir string) error {
 	}
 
 	ssh.SetDHKexServerMinBits(uint32(c.MinDHGroupExchangeKeySize))
-	logger.Debug(logSender, "", "minimum key size allowed for diffie-ellman-group-exchange: %d",
+	logger.Debug(logSender, "", "minimum key size allowed for diffie-hellman-group-exchange: %d",
 		ssh.GetDHKexServerMinBits())
 	sftp.SetSFTPExtensions(sftpExtensions...) //nolint:errcheck // we configure valid SFTP Extensions so we cannot get an error
 	sftp.MaxFilelist = 250
@@ -453,9 +454,9 @@ func (c *Configuration) checkKeyExchangeAlgorithms() {
 		}
 		kexs = append(kexs, k)
 		if strings.TrimSpace(k) == keyExchangeCurve25519SHA256LibSSH {
-			kexs = append(kexs, ssh.KeyExchangeCurve25519SHA256)
+			kexs = append(kexs, ssh.KeyExchangeCurve25519)
 		}
-		if strings.TrimSpace(k) == ssh.KeyExchangeCurve25519SHA256 {
+		if strings.TrimSpace(k) == ssh.KeyExchangeCurve25519 {
 			kexs = append(kexs, keyExchangeCurve25519SHA256LibSSH)
 		}
 	}
@@ -563,7 +564,7 @@ func (c *Configuration) configureKeyboardInteractiveAuth(serverConfig *ssh.Serve
 }
 
 // AcceptInboundConnection handles an inbound connection to the server instance and determines if the request should be served or not.
-func (c *Configuration) AcceptInboundConnection(conn net.Conn, config *ssh.ServerConfig) {
+func (c *Configuration) AcceptInboundConnection(conn net.Conn, config *ssh.ServerConfig) { //nolint:gocyclo
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Error(logSender, "", "panic in AcceptInboundConnection: %q stack trace: %v", r, string(debug.Stack()))
@@ -592,7 +593,7 @@ func (c *Configuration) AcceptInboundConnection(conn net.Conn, config *ssh.Serve
 	conn.SetDeadline(time.Time{}) //nolint:errcheck
 	go ssh.DiscardRequests(reqs)
 
-	defer conn.Close()
+	defer sconn.Close()
 
 	var user dataprovider.User
 
@@ -600,7 +601,7 @@ func (c *Configuration) AcceptInboundConnection(conn net.Conn, config *ssh.Serve
 	json.Unmarshal(util.StringToBytes(sconn.Permissions.Extensions["sftpgo_user"]), &user) //nolint:errcheck
 
 	loginType := sconn.Permissions.Extensions["sftpgo_login_method"]
-	connectionID := hex.EncodeToString(sconn.SessionID())
+	connectionID := xid.New().String()
 
 	defer user.CloseFs() //nolint:errcheck
 	if err = user.CheckFsRoot(connectionID); err != nil {
@@ -615,7 +616,7 @@ func (c *Configuration) AcceptInboundConnection(conn net.Conn, config *ssh.Serve
 
 	dataprovider.UpdateLastLogin(&user)
 
-	sshConnection := common.NewSSHConnection(connectionID, conn)
+	sshConnection := common.NewSSHConnection(connectionID, sconn)
 	common.Connections.AddSSHConnection(sshConnection)
 
 	defer common.Connections.RemoveSSHConnection(connectionID)
@@ -638,7 +639,6 @@ func (c *Configuration) AcceptInboundConnection(conn net.Conn, config *ssh.Serve
 		}
 
 		channelCounter++
-		sshConnection.UpdateLastActivity()
 		// Channels have a type that is dependent on the protocol. For SFTP this is "subsystem"
 		// with a payload that (should) be "sftp". Discard anything else we receive ("pty", "shell", etc)
 		go func(in <-chan *ssh.Request, counter int64) {
@@ -650,6 +650,7 @@ func (c *Configuration) AcceptInboundConnection(conn net.Conn, config *ssh.Serve
 				case "subsystem":
 					if bytes.Equal(req.Payload[4:], []byte("sftp")) {
 						ok = true
+						sshConnection.UpdateLastActivity()
 						connection := &Connection{
 							BaseConnection: common.NewBaseConnection(connID, common.ProtocolSFTP, conn.LocalAddr().String(),
 								conn.RemoteAddr().String(), user),
@@ -671,6 +672,9 @@ func (c *Configuration) AcceptInboundConnection(conn net.Conn, config *ssh.Serve
 						channel:       channel,
 					}
 					ok = processSSHCommand(req.Payload, &connection, c.EnabledSSHCommands)
+					if ok {
+						sshConnection.UpdateLastActivity()
+					}
 				}
 				if req.WantReply {
 					req.Reply(ok, nil) //nolint:errcheck
@@ -857,11 +861,12 @@ func (c *Configuration) generateDefaultHostKeys(configDir string) error {
 		if _, err = os.Stat(autoFile); errors.Is(err, fs.ErrNotExist) {
 			logger.Info(logSender, "", "No host keys configured and %q does not exist; try to create a new host key", autoFile)
 			logger.InfoToConsole("No host keys configured and %q does not exist; try to create a new host key", autoFile)
-			if k == defaultPrivateRSAKeyName {
+			switch k {
+			case defaultPrivateRSAKeyName:
 				err = util.GenerateRSAKeys(autoFile)
-			} else if k == defaultPrivateECDSAKeyName {
+			case defaultPrivateECDSAKeyName:
 				err = util.GenerateECDSAKeys(autoFile)
-			} else {
+			default:
 				err = util.GenerateEd25519Keys(autoFile)
 			}
 			if err != nil {

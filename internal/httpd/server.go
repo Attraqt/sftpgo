@@ -103,8 +103,6 @@ func (s *httpdServer) listenAndServe() error {
 	httpServer := &http.Server{
 		Handler:           s.router,
 		ReadHeaderTimeout: 30 * time.Second,
-		ReadTimeout:       60 * time.Second,
-		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 16, // 64KB
 		ErrorLog:          log.New(&logger.StdLoggerWrapper{Sender: logSender}, "", 0),
@@ -244,7 +242,7 @@ func (s *httpdServer) handleWebClientLoginPost(w http.ResponseWriter, r *http.Re
 	}
 	protocol := common.ProtocolHTTP
 	username := strings.TrimSpace(r.Form.Get("username"))
-	password := strings.TrimSpace(r.Form.Get("password"))
+	password := r.Form.Get("password")
 	if username == "" || password == "" {
 		updateLoginMetrics(&dataprovider.User{BaseUser: sdk.BaseUser{Username: username}},
 			dataprovider.LoginMethodPassword, ipAddr, common.ErrNoCredentials, r)
@@ -273,7 +271,7 @@ func (s *httpdServer) handleWebClientLoginPost(w http.ResponseWriter, r *http.Re
 		return
 	}
 	connectionID := fmt.Sprintf("%v_%v", protocol, xid.New().String())
-	if err := checkHTTPClientUser(&user, r, connectionID, true); err != nil {
+	if err := checkHTTPClientUser(&user, r, connectionID, true, false); err != nil {
 		updateLoginMetrics(&user, dataprovider.LoginMethodPassword, ipAddr, err, r)
 		s.renderClientLoginPage(w, r, util.NewI18nError(err, util.I18nError403Message))
 		return
@@ -312,7 +310,7 @@ func (s *httpdServer) handleWebClientPasswordResetPost(w http.ResponseWriter, r 
 		return
 	}
 	connectionID := fmt.Sprintf("%v_%v", getProtocolFromRequest(r), xid.New().String())
-	if err := checkHTTPClientUser(user, r, connectionID, true); err != nil {
+	if err := checkHTTPClientUser(user, r, connectionID, true, false); err != nil {
 		s.renderClientResetPwdPage(w, r, util.NewI18nError(err, util.I18nErrorLoginAfterReset))
 		return
 	}
@@ -840,7 +838,7 @@ func (s *httpdServer) getUserToken(w http.ResponseWriter, r *http.Request) {
 		sendAPIResponse(w, r, nil, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		return
 	}
-	if username == "" || password == "" {
+	if username == "" || strings.TrimSpace(password) == "" {
 		updateLoginMetrics(&dataprovider.User{BaseUser: sdk.BaseUser{Username: username}},
 			dataprovider.LoginMethodPassword, ipAddr, common.ErrNoCredentials, r)
 		w.Header().Set(common.HTTPAuthenticationHeader, basicRealm)
@@ -862,7 +860,7 @@ func (s *httpdServer) getUserToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	connectionID := fmt.Sprintf("%v_%v", protocol, xid.New().String())
-	if err := checkHTTPClientUser(&user, r, connectionID, true); err != nil {
+	if err := checkHTTPClientUser(&user, r, connectionID, true, false); err != nil {
 		updateLoginMetrics(&user, dataprovider.LoginMethodPassword, ipAddr, err, r)
 		sendAPIResponse(w, r, err, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 		return
@@ -1039,7 +1037,7 @@ func (s *httpdServer) refreshClientToken(w http.ResponseWriter, r *http.Request,
 		logger.Debug(logSender, "", "unable to refresh cookie for user %q: %v", user.Username, err)
 		return
 	}
-	if err := checkHTTPClientUser(&user, r, xid.New().String(), true); err != nil {
+	if err := checkHTTPClientUser(&user, r, xid.New().String(), true, false); err != nil {
 		logger.Debug(logSender, "", "unable to refresh cookie for user %q: %v", user.Username, err)
 		return
 	}
@@ -1087,6 +1085,11 @@ func (s *httpdServer) updateContextFromCookie(r *http.Request) *http.Request {
 
 func (s *httpdServer) parseHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		responseControllerDeadlines(
+			http.NewResponseController(w),
+			time.Now().Add(60*time.Second),
+			time.Now().Add(60*time.Second),
+		)
 		w.Header().Set("Server", version.GetServerVersion("/", false))
 		ipAddr := util.GetIPFromRemoteAddress(r.RemoteAddr)
 		var ip net.IP
@@ -1257,6 +1260,7 @@ func (s *httpdServer) initializeRouter() {
 			CrossOriginOpenerPolicy:   s.binding.Security.CrossOriginOpenerPolicy,
 			CrossOriginResourcePolicy: s.binding.Security.CrossOriginResourcePolicy,
 			CrossOriginEmbedderPolicy: s.binding.Security.CrossOriginEmbedderPolicy,
+			ReferrerPolicy:            s.binding.Security.ReferrerPolicy,
 		})
 		secureMiddleware.SetBadHostHandler(http.HandlerFunc(s.badHostHandler))
 		if s.binding.Security.CacheControl == "private" {
@@ -1429,8 +1433,6 @@ func (s *httpdServer) setupRESTAPIRoutes() {
 				router.With(s.checkPerms(dataprovider.PermAdminAny)).Delete(adminPath+"/{username}", deleteAdmin)
 				router.With(s.checkPerms(dataprovider.PermAdminDisableMFA)).Put(adminPath+"/{username}/2fa/disable", disableAdmin2FA)
 				router.With(s.checkPerms(dataprovider.PermAdminAny)).Get(retentionChecksPath, getRetentionChecks)
-				router.With(s.checkPerms(dataprovider.PermAdminAny)).Post(retentionBasePath+"/{username}/check",
-					startRetentionCheck)
 				router.With(s.checkPerms(dataprovider.PermAdminViewEvents), compressor.Handler).
 					Get(fsEventsPath, searchFsEvents)
 				router.With(s.checkPerms(dataprovider.PermAdminViewEvents), compressor.Handler).

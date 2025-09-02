@@ -13,7 +13,6 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 //go:build !noazblob
-// +build !noazblob
 
 package vfs
 
@@ -561,7 +560,7 @@ func (fs *AzureBlobFs) GetDirSize(dirname string) (int, int64, error) {
 			metric.AZListObjectsCompleted(err)
 			return numFiles, size, err
 		}
-		for _, blobItem := range resp.ListBlobsFlatSegmentResponse.Segment.BlobItems {
+		for _, blobItem := range resp.Segment.BlobItems {
 			if blobItem.Properties != nil {
 				contentType := util.GetStringFromPointer(blobItem.Properties.ContentType)
 				isDir := checkDirectoryMarkers(contentType, blobItem.Metadata)
@@ -629,7 +628,7 @@ func (fs *AzureBlobFs) Walk(root string, walkFn filepath.WalkFunc) error {
 			metric.AZListObjectsCompleted(err)
 			return err
 		}
-		for _, blobItem := range resp.ListBlobsFlatSegmentResponse.Segment.BlobItems {
+		for _, blobItem := range resp.Segment.BlobItems {
 			name := util.GetStringFromPointer(blobItem.Name)
 			if fs.isEqual(name, prefix) {
 				continue
@@ -886,7 +885,7 @@ func (fs *AzureBlobFs) hasContents(name string) (bool, error) {
 			return result, err
 		}
 
-		result = len(resp.ListBlobsFlatSegmentResponse.Segment.BlobItems) > 0
+		result = len(resp.Segment.BlobItems) > 0
 	}
 
 	metric.AZListObjectsCompleted(nil)
@@ -909,9 +908,9 @@ func (fs *AzureBlobFs) downloadPart(ctx context.Context, blockBlob *blockblob.Cl
 	if err != nil {
 		return err
 	}
-	defer resp.DownloadResponse.Body.Close()
+	defer resp.Body.Close()
 
-	_, err = io.ReadAtLeast(resp.DownloadResponse.Body, buf, int(count))
+	_, err = io.ReadAtLeast(resp.Body, buf, int(count))
 	if err != nil {
 		return err
 	}
@@ -947,6 +946,8 @@ func (fs *AzureBlobFs) handleMultipartDownload(ctx context.Context, blockBlob *b
 	guard := make(chan struct{}, fs.config.DownloadConcurrency)
 	blockCtxTimeout := time.Duration(fs.config.DownloadPartSize/(1024*1024)) * time.Minute
 	pool := newBufferAllocator(int(partSize))
+	defer pool.free()
+
 	finished := false
 	var wg sync.WaitGroup
 	var errOnce sync.Once
@@ -1000,7 +1001,6 @@ func (fs *AzureBlobFs) handleMultipartDownload(ctx context.Context, blockBlob *b
 
 	wg.Wait()
 	close(guard)
-	pool.free()
 
 	return poolError
 }
@@ -1015,6 +1015,8 @@ func (fs *AzureBlobFs) handleMultipartUpload(ctx context.Context, reader io.Read
 	// sync.Pool seems to use a lot of memory so prefer our own, very simple, allocator
 	// we only need to recycle few byte slices
 	pool := newBufferAllocator(int(partSize))
+	defer pool.free()
+
 	finished := false
 	var blocks []string
 	var wg sync.WaitGroup
@@ -1028,7 +1030,7 @@ func (fs *AzureBlobFs) handleMultipartUpload(ctx context.Context, reader io.Read
 	for part := 0; !finished; part++ {
 		buf := pool.getBuffer()
 
-		n, err := fs.readFill(reader, buf)
+		n, err := readFill(reader, buf)
 		if err == io.EOF {
 			// read finished, if n > 0 we need to process the last data chunck
 			if n == 0 {
@@ -1038,7 +1040,6 @@ func (fs *AzureBlobFs) handleMultipartUpload(ctx context.Context, reader io.Read
 			finished = true
 		} else if err != nil {
 			pool.releaseBuffer(buf)
-			pool.free()
 			return err
 		}
 
@@ -1047,7 +1048,6 @@ func (fs *AzureBlobFs) handleMultipartUpload(ctx context.Context, reader io.Read
 		generatedUUID, err := uuid.NewRandom()
 		if err != nil {
 			pool.releaseBuffer(buf)
-			pool.free()
 			return fmt.Errorf("unable to generate block ID: %w", err)
 		}
 		blockID := base64.StdEncoding.EncodeToString([]byte(generatedUUID.String()))
@@ -1088,7 +1088,6 @@ func (fs *AzureBlobFs) handleMultipartUpload(ctx context.Context, reader io.Read
 
 	wg.Wait()
 	close(guard)
-	pool.free()
 
 	if poolError != nil {
 		return poolError
@@ -1116,16 +1115,6 @@ func (*AzureBlobFs) writeAtFull(w io.WriterAt, buf []byte, offset int64, count i
 		}
 	}
 	return written, nil
-}
-
-// copied from rclone
-func (*AzureBlobFs) readFill(r io.Reader, buf []byte) (n int, err error) {
-	var nn int
-	for n < len(buf) && err == nil {
-		nn, err = r.Read(buf[n:])
-		n += nn
-	}
-	return n, err
 }
 
 func (fs *AzureBlobFs) getCopyOptions(srcInfo os.FileInfo, updateModTime bool) *blob.StartCopyFromURLOptions {
@@ -1188,66 +1177,6 @@ func getAzContainerClientOptions() *container.ClientOptions {
 	}
 }
 
-type bytesReaderWrapper struct {
-	*bytes.Reader
-}
-
-func (b *bytesReaderWrapper) Close() error {
-	return nil
-}
-
-type bufferAllocator struct {
-	sync.Mutex
-	available  [][]byte
-	bufferSize int
-	finalized  bool
-}
-
-func newBufferAllocator(size int) *bufferAllocator {
-	return &bufferAllocator{
-		bufferSize: size,
-		finalized:  false,
-	}
-}
-
-func (b *bufferAllocator) getBuffer() []byte {
-	b.Lock()
-	defer b.Unlock()
-
-	if len(b.available) > 0 {
-		var result []byte
-
-		truncLength := len(b.available) - 1
-		result = b.available[truncLength]
-
-		b.available[truncLength] = nil
-		b.available = b.available[:truncLength]
-
-		return result
-	}
-
-	return make([]byte, b.bufferSize)
-}
-
-func (b *bufferAllocator) releaseBuffer(buf []byte) {
-	b.Lock()
-	defer b.Unlock()
-
-	if b.finalized || len(buf) != b.bufferSize {
-		return
-	}
-
-	b.available = append(b.available, buf)
-}
-
-func (b *bufferAllocator) free() {
-	b.Lock()
-	defer b.Unlock()
-
-	b.available = nil
-	b.finalized = true
-}
-
 type azureBlobDirLister struct {
 	baseDirLister
 	paginator     *runtime.Pager[container.ListBlobsHierarchyResponse]
@@ -1280,7 +1209,7 @@ func (l *azureBlobDirLister) Next(limit int) ([]os.FileInfo, error) {
 		return l.cache, err
 	}
 
-	for _, blobPrefix := range page.ListBlobsHierarchySegmentResponse.Segment.BlobPrefixes {
+	for _, blobPrefix := range page.Segment.BlobPrefixes {
 		name := util.GetStringFromPointer(blobPrefix.Name)
 		// we don't support prefixes == "/" this will be sent if a key starts with "/"
 		if name == "" || name == "/" {
@@ -1295,7 +1224,7 @@ func (l *azureBlobDirLister) Next(limit int) ([]os.FileInfo, error) {
 		l.prefixes[strings.TrimSuffix(name, "/")] = true
 	}
 
-	for _, blobItem := range page.ListBlobsHierarchySegmentResponse.Segment.BlobItems {
+	for _, blobItem := range page.Segment.BlobItems {
 		name := util.GetStringFromPointer(blobItem.Name)
 		name = strings.TrimPrefix(name, l.prefix)
 		size := int64(0)

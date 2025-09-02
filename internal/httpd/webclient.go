@@ -902,15 +902,12 @@ func (s *httpdServer) handleWebClientDownloadZip(w http.ResponseWriter, r *http.
 	connID := xid.New().String()
 	protocol := getProtocolFromRequest(r)
 	connectionID := fmt.Sprintf("%v_%v", protocol, connID)
-	if err := checkHTTPClientUser(&user, r, connectionID, false); err != nil {
+	if err := checkHTTPClientUser(&user, r, connectionID, false, false); err != nil {
 		s.renderClientForbiddenPage(w, r, err)
 		return
 	}
-	connection := &Connection{
-		BaseConnection: common.NewBaseConnection(connID, protocol, util.GetHTTPLocalAddress(r),
-			r.RemoteAddr, user),
-		request: r,
-	}
+	baseConn := common.NewBaseConnection(connID, protocol, util.GetHTTPLocalAddress(r), r.RemoteAddr, user)
+	connection := newConnection(baseConn, w, r)
 	if err = common.Connections.Add(connection); err != nil {
 		s.renderClientMessagePage(w, r, util.I18nError429Title, http.StatusTooManyRequests,
 			util.NewI18nError(err, util.I18nError429Message), "")
@@ -1009,7 +1006,7 @@ func (s *httpdServer) handleShareGetDirContents(w http.ResponseWriter, r *http.R
 	}
 	defer lister.Close()
 
-	dataGetter := func(limit, _ int) ([]byte, int, error) {
+	dataGetter := func(limit, offset int) ([]byte, int, error) {
 		contents, err := lister.Next(limit)
 		if errors.Is(err, io.EOF) {
 			err = nil
@@ -1018,11 +1015,12 @@ func (s *httpdServer) handleShareGetDirContents(w http.ResponseWriter, r *http.R
 			return nil, 0, err
 		}
 		results := make([]map[string]any, 0, len(contents))
-		for _, info := range contents {
+		for idx, info := range contents {
 			if !info.Mode().IsDir() && !info.Mode().IsRegular() {
 				continue
 			}
 			res := make(map[string]any)
+			res["id"] = offset + idx + 1
 			if info.IsDir() {
 				res["type"] = "1"
 				res["size"] = ""
@@ -1192,15 +1190,12 @@ func (s *httpdServer) handleClientGetDirContents(w http.ResponseWriter, r *http.
 	connID := xid.New().String()
 	protocol := getProtocolFromRequest(r)
 	connectionID := fmt.Sprintf("%s_%s", protocol, connID)
-	if err := checkHTTPClientUser(&user, r, connectionID, false); err != nil {
+	if err := checkHTTPClientUser(&user, r, connectionID, false, false); err != nil {
 		sendAPIResponse(w, r, err, getI18NErrorString(err, util.I18nErrorDirList403), http.StatusForbidden)
 		return
 	}
-	connection := &Connection{
-		BaseConnection: common.NewBaseConnection(connID, protocol, util.GetHTTPLocalAddress(r),
-			r.RemoteAddr, user),
-		request: r,
-	}
+	baseConn := common.NewBaseConnection(connID, protocol, util.GetHTTPLocalAddress(r), r.RemoteAddr, user)
+	connection := newConnection(baseConn, w, r)
 	if err = common.Connections.Add(connection); err != nil {
 		sendAPIResponse(w, r, err, util.I18nErrorDirList429, http.StatusTooManyRequests)
 		return
@@ -1217,7 +1212,7 @@ func (s *httpdServer) handleClientGetDirContents(w http.ResponseWriter, r *http.
 	defer lister.Close()
 
 	dirTree := r.URL.Query().Get("dirtree") == "1"
-	dataGetter := func(limit, _ int) ([]byte, int, error) {
+	dataGetter := func(limit, offset int) ([]byte, int, error) {
 		contents, err := lister.Next(limit)
 		if errors.Is(err, io.EOF) {
 			err = nil
@@ -1226,8 +1221,9 @@ func (s *httpdServer) handleClientGetDirContents(w http.ResponseWriter, r *http.
 			return nil, 0, err
 		}
 		results := make([]map[string]any, 0, len(contents))
-		for _, info := range contents {
+		for idx, info := range contents {
 			res := make(map[string]any)
+			res["id"] = offset + idx + 1
 			res["url"] = getFileObjectURL(name, info.Name(), webClientFilesPath)
 			if info.IsDir() {
 				res["type"] = "1"
@@ -1281,15 +1277,12 @@ func (s *httpdServer) handleClientGetFiles(w http.ResponseWriter, r *http.Reques
 	connID := xid.New().String()
 	protocol := getProtocolFromRequest(r)
 	connectionID := fmt.Sprintf("%v_%v", protocol, connID)
-	if err := checkHTTPClientUser(&user, r, connectionID, false); err != nil {
+	if err := checkHTTPClientUser(&user, r, connectionID, false, false); err != nil {
 		s.renderClientForbiddenPage(w, r, err)
 		return
 	}
-	connection := &Connection{
-		BaseConnection: common.NewBaseConnection(connID, protocol, util.GetHTTPLocalAddress(r),
-			r.RemoteAddr, user),
-		request: r,
-	}
+	baseConn := common.NewBaseConnection(connID, protocol, util.GetHTTPLocalAddress(r), r.RemoteAddr, user)
+	connection := newConnection(baseConn, w, r)
 	if err = common.Connections.Add(connection); err != nil {
 		s.renderClientMessagePage(w, r, util.I18nError429Title, http.StatusTooManyRequests,
 			util.NewI18nError(err, util.I18nError429Message), "")
@@ -1342,15 +1335,12 @@ func (s *httpdServer) handleClientEditFile(w http.ResponseWriter, r *http.Reques
 	connID := xid.New().String()
 	protocol := getProtocolFromRequest(r)
 	connectionID := fmt.Sprintf("%v_%v", protocol, connID)
-	if err := checkHTTPClientUser(&user, r, connectionID, false); err != nil {
+	if err := checkHTTPClientUser(&user, r, connectionID, false, false); err != nil {
 		s.renderClientForbiddenPage(w, r, err)
 		return
 	}
-	connection := &Connection{
-		BaseConnection: common.NewBaseConnection(connID, protocol, util.GetHTTPLocalAddress(r),
-			r.RemoteAddr, user),
-		request: r,
-	}
+	baseConn := common.NewBaseConnection(connID, protocol, util.GetHTTPLocalAddress(r), r.RemoteAddr, user)
+	connection := newConnection(baseConn, w, r)
 	if err = common.Connections.Add(connection); err != nil {
 		s.renderClientMessagePage(w, r, util.I18nError429Title, http.StatusTooManyRequests,
 			util.NewI18nError(err, util.I18nError429Message), "")
@@ -1838,15 +1828,12 @@ func (s *httpdServer) handleClientGetPDF(w http.ResponseWriter, r *http.Request)
 	connID := xid.New().String()
 	protocol := getProtocolFromRequest(r)
 	connectionID := fmt.Sprintf("%v_%v", protocol, connID)
-	if err := checkHTTPClientUser(&user, r, connectionID, false); err != nil {
+	if err := checkHTTPClientUser(&user, r, connectionID, false, false); err != nil {
 		s.renderClientForbiddenPage(w, r, err)
 		return
 	}
-	connection := &Connection{
-		BaseConnection: common.NewBaseConnection(connID, protocol, util.GetHTTPLocalAddress(r),
-			r.RemoteAddr, user),
-		request: r,
-	}
+	baseConn := common.NewBaseConnection(connID, protocol, util.GetHTTPLocalAddress(r), r.RemoteAddr, user)
+	connection := newConnection(baseConn, w, r)
 	if err = common.Connections.Add(connection); err != nil {
 		s.renderClientMessagePage(w, r, util.I18nError429Title, http.StatusTooManyRequests,
 			util.NewI18nError(err, util.I18nError429Message), "")

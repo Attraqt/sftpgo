@@ -1,4 +1,4 @@
-// Copyright (C) 2019 Nicola Murino
+// Copyright (C) 2025 Nicola Murino
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published
@@ -12,11 +12,25 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-//go:build !awscontainer
-// +build !awscontainer
+package cmd
 
-package service
+import (
+	"os"
+	"os/signal"
 
-func registerAWSContainer(_ bool) error {
-	return nil
+	"github.com/drakkan/sftpgo/v2/internal/logger"
+	"github.com/drakkan/sftpgo/v2/internal/plugin"
+)
+
+func registerSignals() {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+
+	go func() {
+		for range c {
+			logger.DebugToConsole("Received interrupt request")
+			plugin.Handler.Cleanup()
+			os.Exit(0)
+		}
+	}()
 }

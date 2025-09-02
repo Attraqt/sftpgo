@@ -13,7 +13,6 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 //go:build !nopgsql
-// +build !nopgsql
 
 package dataprovider
 
@@ -212,6 +211,36 @@ INSERT INTO {{schema_version}} (version) VALUES (29);
 	ipListsLikeIndex = `CREATE INDEX "{{prefix}}ip_lists_ipornet_like_idx" ON "{{ip_lists}}" ("ipornet" varchar_pattern_ops);`
 	pgsqlV30SQL      = `ALTER TABLE "{{shares}}" ADD COLUMN "options" text NULL;`
 	pgsqlV30DownSQL  = `ALTER TABLE "{{shares}}" DROP COLUMN "options" CASCADE;`
+	pgsqlV31SQL      = `DROP TABLE "{{shared_sessions}}";
+CREATE TABLE "{{shared_sessions}}" ("key" varchar(128) NOT NULL, "type" integer NOT NULL,
+"data" text NOT NULL, "timestamp" bigint NOT NULL, PRIMARY KEY ("key", "type"));
+CREATE INDEX "{{prefix}}shared_sessions_type_idx" ON "{{shared_sessions}}" ("type");
+CREATE INDEX "{{prefix}}shared_sessions_timestamp_idx" ON "{{shared_sessions}}" ("timestamp");
+`
+	pgsqlV31DownSQL = `DROP TABLE "{{shared_sessions}}" CASCADE;
+CREATE TABLE "{{shared_sessions}}" ("key" varchar(128) NOT NULL PRIMARY KEY,
+"data" text NOT NULL, "type" integer NOT NULL, "timestamp" bigint NOT NULL);
+CREATE INDEX "{{prefix}}shared_sessions_type_idx" ON "{{shared_sessions}}" ("type");
+CREATE INDEX "{{prefix}}shared_sessions_timestamp_idx" ON "{{shared_sessions}}" ("timestamp");
+`
+	pgsqlV33SQL = `ALTER TABLE "{{admins_groups_mapping}}" ADD COLUMN "sort_order" integer DEFAULT 0 NOT NULL;
+ALTER TABLE "{{admins_groups_mapping}}" ALTER COLUMN "sort_order" DROP DEFAULT;
+ALTER TABLE "{{groups_folders_mapping}}" ADD COLUMN "sort_order" integer DEFAULT 0 NOT NULL;
+ALTER TABLE "{{groups_folders_mapping}}" ALTER COLUMN "sort_order" DROP DEFAULT;
+ALTER TABLE "{{users_folders_mapping}}" ADD COLUMN "sort_order" integer DEFAULT 0 NOT NULL;
+ALTER TABLE "{{users_folders_mapping}}" ALTER COLUMN "sort_order" DROP DEFAULT;
+ALTER TABLE "{{users_groups_mapping}}" ADD COLUMN "sort_order" integer DEFAULT 0 NOT NULL;
+ALTER TABLE "{{users_groups_mapping}}" ALTER COLUMN "sort_order" DROP DEFAULT;
+CREATE INDEX "{{prefix}}admins_groups_mapping_sort_order_idx" ON "{{admins_groups_mapping}}" ("sort_order");
+CREATE INDEX "{{prefix}}groups_folders_mapping_sort_order_idx" ON "{{groups_folders_mapping}}" ("sort_order");
+CREATE INDEX "{{prefix}}users_folders_mapping_sort_order_idx" ON "{{users_folders_mapping}}" ("sort_order");
+CREATE INDEX "{{prefix}}users_groups_mapping_sort_order_idx" ON "{{users_groups_mapping}}" ("sort_order");
+`
+	pgsqlV33DownSQL = `ALTER TABLE "{{users_groups_mapping}}" DROP COLUMN "sort_order" CASCADE;
+ALTER TABLE "{{users_folders_mapping}}" DROP COLUMN "sort_order" CASCADE;
+ALTER TABLE "{{groups_folders_mapping}}" DROP COLUMN "sort_order" CASCADE;
+ALTER TABLE "{{admins_groups_mapping}}" DROP COLUMN "sort_order" CASCADE;
+`
 )
 
 var (
@@ -271,7 +300,7 @@ func getPGSQLHostsAndPorts(configHost string, configPort int) (string, string) {
 		defaultPort = "5432"
 	}
 
-	for _, hostport := range strings.Split(configHost, ",") {
+	for hostport := range strings.SplitSeq(configHost, ",") {
 		hostport = strings.TrimSpace(hostport)
 		if hostport == "" {
 			continue
@@ -607,12 +636,12 @@ func (p *PGSQLProvider) addSharedSession(session Session) error {
 	return sqlCommonAddSession(session, p.dbHandle)
 }
 
-func (p *PGSQLProvider) deleteSharedSession(key string) error {
-	return sqlCommonDeleteSession(key, p.dbHandle)
+func (p *PGSQLProvider) deleteSharedSession(key string, sessionType SessionType) error {
+	return sqlCommonDeleteSession(key, sessionType, p.dbHandle)
 }
 
-func (p *PGSQLProvider) getSharedSession(key string) (Session, error) {
-	return sqlCommonGetSession(key, p.dbHandle)
+func (p *PGSQLProvider) getSharedSession(key string, sessionType SessionType) (Session, error) {
+	return sqlCommonGetSession(key, sessionType, p.dbHandle)
 }
 
 func (p *PGSQLProvider) cleanupSharedSessions(sessionType SessionType, before int64) error {
@@ -830,6 +859,12 @@ func (p *PGSQLProvider) migrateDatabase() error { //nolint:dupl
 		return err
 	case version == 29:
 		return updatePGSQLDatabaseFromV29(p.dbHandle)
+	case version == 30:
+		return updatePGSQLDatabaseFromV30(p.dbHandle)
+	case version == 31:
+		return updatePGSQLDatabaseFromV31(p.dbHandle)
+	case version == 32:
+		return updatePGSQLDatabaseFromV32(p.dbHandle)
 	default:
 		if version > sqlDatabaseVersion {
 			providerLog(logger.LevelError, "database schema version %d is newer than the supported one: %d", version,
@@ -854,6 +889,12 @@ func (p *PGSQLProvider) revertDatabase(targetVersion int) error {
 	switch dbVersion.Version {
 	case 30:
 		return downgradePGSQLDatabaseFromV30(p.dbHandle)
+	case 31:
+		return downgradePGSQLDatabaseFromV31(p.dbHandle)
+	case 32:
+		return downgradePGSQLDatabaseFromV32(p.dbHandle)
+	case 33:
+		return downgradePGSQLDatabaseFromV33(p.dbHandle)
 	default:
 		return fmt.Errorf("database schema version not handled: %d", dbVersion.Version)
 	}
@@ -893,11 +934,53 @@ func (p *PGSQLProvider) normalizeError(err error, fieldType int) error {
 }
 
 func updatePGSQLDatabaseFromV29(dbHandle *sql.DB) error {
-	return updatePGSQLDatabaseFrom29To30(dbHandle)
+	if err := updatePGSQLDatabaseFrom29To30(dbHandle); err != nil {
+		return err
+	}
+	return updatePGSQLDatabaseFromV30(dbHandle)
+}
+
+func updatePGSQLDatabaseFromV30(dbHandle *sql.DB) error {
+	if err := updatePGSQLDatabaseFrom30To31(dbHandle); err != nil {
+		return err
+	}
+	return updatePGSQLDatabaseFromV31(dbHandle)
+}
+
+func updatePGSQLDatabaseFromV31(dbHandle *sql.DB) error {
+	if err := updateSQLDatabaseFrom31To32(dbHandle); err != nil {
+		return err
+	}
+	return updatePGSQLDatabaseFromV32(dbHandle)
+}
+
+func updatePGSQLDatabaseFromV32(dbHandle *sql.DB) error {
+	return updatePGSQLDatabaseFrom32To33(dbHandle)
 }
 
 func downgradePGSQLDatabaseFromV30(dbHandle *sql.DB) error {
 	return downgradePGSQLDatabaseFrom30To29(dbHandle)
+}
+
+func downgradePGSQLDatabaseFromV31(dbHandle *sql.DB) error {
+	if err := downgradePGSQLDatabaseFrom31To30(dbHandle); err != nil {
+		return err
+	}
+	return downgradePGSQLDatabaseFromV30(dbHandle)
+}
+
+func downgradePGSQLDatabaseFromV32(dbHandle *sql.DB) error {
+	if err := downgradeSQLDatabaseFrom32To31(dbHandle); err != nil {
+		return err
+	}
+	return downgradePGSQLDatabaseFromV31(dbHandle)
+}
+
+func downgradePGSQLDatabaseFromV33(dbHandle *sql.DB) error {
+	if err := downgradePGSQLDatabaseFrom33To32(dbHandle); err != nil {
+		return err
+	}
+	return downgradePGSQLDatabaseFromV32(dbHandle)
 }
 
 func updatePGSQLDatabaseFrom29To30(dbHandle *sql.DB) error {
@@ -914,4 +997,47 @@ func downgradePGSQLDatabaseFrom30To29(dbHandle *sql.DB) error {
 
 	sql := strings.ReplaceAll(pgsqlV30DownSQL, "{{shares}}", sqlTableShares)
 	return sqlCommonExecSQLAndUpdateDBVersion(dbHandle, []string{sql}, 29, false)
+}
+
+func updatePGSQLDatabaseFrom30To31(dbHandle *sql.DB) error {
+	logger.InfoToConsole("updating database schema version: 30 -> 31")
+	providerLog(logger.LevelInfo, "updating database schema version: 30 -> 31")
+
+	sql := strings.ReplaceAll(pgsqlV31SQL, "{{shared_sessions}}", sqlTableSharedSessions)
+	sql = strings.ReplaceAll(sql, "{{prefix}}", config.SQLTablesPrefix)
+	return sqlCommonExecSQLAndUpdateDBVersion(dbHandle, []string{sql}, 31, true)
+}
+
+func downgradePGSQLDatabaseFrom31To30(dbHandle *sql.DB) error {
+	logger.InfoToConsole("downgrading database schema version: 31 -> 30")
+	providerLog(logger.LevelInfo, "downgrading database schema version: 31 -> 30")
+
+	sql := strings.ReplaceAll(pgsqlV31DownSQL, "{{shared_sessions}}", sqlTableSharedSessions)
+	sql = strings.ReplaceAll(sql, "{{prefix}}", config.SQLTablesPrefix)
+	return sqlCommonExecSQLAndUpdateDBVersion(dbHandle, []string{sql}, 30, false)
+}
+
+func updatePGSQLDatabaseFrom32To33(dbHandle *sql.DB) error {
+	logger.InfoToConsole("updating database schema version: 32 -> 33")
+	providerLog(logger.LevelInfo, "updating database schema version: 32 -> 33")
+
+	sql := strings.ReplaceAll(pgsqlV33SQL, "{{prefix}}", config.SQLTablesPrefix)
+	sql = strings.ReplaceAll(sql, "{{users_folders_mapping}}", sqlTableUsersFoldersMapping)
+	sql = strings.ReplaceAll(sql, "{{users_groups_mapping}}", sqlTableUsersGroupsMapping)
+	sql = strings.ReplaceAll(sql, "{{admins_groups_mapping}}", sqlTableAdminsGroupsMapping)
+	sql = strings.ReplaceAll(sql, "{{groups_folders_mapping}}", sqlTableGroupsFoldersMapping)
+	sql = strings.ReplaceAll(sql, "{{prefix}}", config.SQLTablesPrefix)
+	return sqlCommonExecSQLAndUpdateDBVersion(dbHandle, []string{sql}, 33, true)
+}
+
+func downgradePGSQLDatabaseFrom33To32(dbHandle *sql.DB) error {
+	logger.InfoToConsole("downgrading database schema version: 33 -> 32")
+	providerLog(logger.LevelInfo, "downgrading database schema version: 33 -> 32")
+
+	sql := pgsqlV33DownSQL
+	sql = strings.ReplaceAll(sql, "{{users_folders_mapping}}", sqlTableUsersFoldersMapping)
+	sql = strings.ReplaceAll(sql, "{{users_groups_mapping}}", sqlTableUsersGroupsMapping)
+	sql = strings.ReplaceAll(sql, "{{admins_groups_mapping}}", sqlTableAdminsGroupsMapping)
+	sql = strings.ReplaceAll(sql, "{{groups_folders_mapping}}", sqlTableGroupsFoldersMapping)
+	return sqlCommonExecSQLAndUpdateDBVersion(dbHandle, []string{sql}, 32, false)
 }

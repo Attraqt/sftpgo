@@ -156,6 +156,7 @@
         "datetime": "{{- val, datetime}}",
         "selected_items_one": "{{count}} item selected",
         "selected_items_other": "{{count}} items selected",
+        "selected_with_placeholder": "%d items selected",
         "name_required": "Name is required",
         "name_different": "The new name must be different from the current name",
         "html5_media_not_supported": "Your browser does not support HTML5 audio/video.",
@@ -284,6 +285,7 @@
         "download": "Download",
         "download_ready": "Your download is ready",
         "upload_queue_not_ready": "The upload queue is still loading, please try again in a few moments",
+        "upload_no_files": "No files selected. Please choose or drag files to upload",
         "move_copy": "Move or copy",
         "share": "Share",
         "home": "Home",
@@ -405,7 +407,7 @@
         "generate": "Generate new secret key",
         "recovery_codes": "Recovery codes",
         "new_recovery_codes": "New recovery codes",
-        "recovery_codes_msg1": "Recovery codes are a set of one time use codes that can be used in place of the authentication code to login to the web UI. You can use them if you lose access to your phone to login to your account and disable or regenerate two-factor auth configuration.",
+        "recovery_codes_msg1": "Recovery codes are one-time-use backup codes for logging in when you can't access your authentication app. Use them to access your account and manage two-factor authentication settings if you lose your phone.",
         "recovery_codes_msg2": "To keep your account secure, don't share or distribute your recovery codes. We recommend saving them with a secure password manager.",
         "recovery_codes_msg3": "If you generate new recovery codes, you automatically invalidate old ones.",
         "info_title": "Learn about two-factor authentication",
@@ -443,7 +445,7 @@
         "max_tokens": "Max tokens",
         "max_tokens_help": "Maximum number of times this share can be accessed. 0 means no limit",
         "view_manage": "View and manage shares",
-        "no_share": "No sharing",
+        "no_share": "No shares",
         "password_protected": "Password protected.",
         "expiration_date": "Expiration: {{- val, datetime}}. ",
         "last_use": "Last use: {{- val, datetime}}. ",
@@ -661,6 +663,16 @@
         "endpoint_invalid": "$t(storage.fs_error): endpoint is invalid",
         "endpoint_required": "$t(storage.fs_error): endpoint is required",
         "username_required": "$t(storage.fs_error): username is required"
+    },
+    "oidc": {
+        "token_expired": "Your OpenID token has expired, please log in again",
+        "token_invalid_webadmin": "Your OpenID token is not valid for the WebAdmin UI. Log out of your OpenID server and log in to WebAdmin",
+        "token_invalid_webclient": "Your OpenID token is not valid for the WebClient UI. Log out of your OpenID server and log in to the WebClient",
+        "token_exchange_err": "Failed to exchange OpenID token",
+        "token_invalid": "Invalid OpenID token",
+        "role_admin_err": "Incorrect OpenID role, logged in user is not an administrator",
+        "role_user_err": "Incorrect OpenID role, logged in user is an administrator",
+        "get_user_err": "Failed to get user associated with OpenID token"
     },
     "oauth2": {
         "auth_verify_error": "Unable to verify OAuth2 code",
@@ -1020,7 +1032,7 @@
         "fs_types": {
             "rename": "Rename",
             "delete": "Delete",
-            "path_exists": "Paths exis",
+            "path_exists": "Paths exist",
             "compress": "Compress",
             "copy": "Copy",
             "create_dirs": "Create directories"

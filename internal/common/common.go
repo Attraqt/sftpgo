@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -614,9 +615,6 @@ type Configuration struct {
 	// Absolute path to an external program or an HTTP URL to invoke after an SSH/FTP connection ends.
 	// Leave empty do disable.
 	PostDisconnectHook string `json:"post_disconnect_hook" mapstructure:"post_disconnect_hook"`
-	// Absolute path to an external program or an HTTP URL to invoke after a data retention check completes.
-	// Leave empty do disable.
-	DataRetentionHook string `json:"data_retention_hook" mapstructure:"data_retention_hook"`
 	// Maximum number of concurrent client connections. 0 means unlimited
 	MaxTotalConnections int `json:"max_total_connections" mapstructure:"max_total_connections"`
 	// Maximum number of concurrent client connections from the same host (IP). 0 means unlimited
@@ -899,12 +897,12 @@ func getProxyPolicy(allowed, skipped []func(net.IP) bool, def proxyproto.Policy)
 // Each SSH connection can open several channels for SFTP or SSH commands
 type SSHConnection struct {
 	id           string
-	conn         net.Conn
+	conn         io.Closer
 	lastActivity atomic.Int64
 }
 
 // NewSSHConnection returns a new SSHConnection
-func NewSSHConnection(id string, conn net.Conn) *SSHConnection {
+func NewSSHConnection(id string, conn io.Closer) *SSHConnection {
 	c := &SSHConnection{
 		id:   id,
 		conn: conn,

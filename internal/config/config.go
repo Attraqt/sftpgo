@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 
+	kmsplugin "github.com/sftpgo/sdk/plugin/kms"
 	"github.com/spf13/viper"
 	"github.com/subosito/gotenv"
 
@@ -216,7 +217,6 @@ func Init() {
 			ProxySkipped:          []string{},
 			PostConnectHook:       "",
 			PostDisconnectHook:    "",
-			DataRetentionHook:     "",
 			MaxTotalConnections:   0,
 			MaxPerHostConnections: 20,
 			AllowListStatus:       0,
@@ -589,6 +589,16 @@ func SetPluginsConfig(config []plugin.Config) {
 	globalConf.PluginsConfig = config
 }
 
+// HasKMSPlugin returns true if at least one KMS plugin is configured.
+func HasKMSPlugin() bool {
+	for _, c := range globalConf.PluginsConfig {
+		if c.Type == kmsplugin.PluginName {
+			return true
+		}
+	}
+	return false
+}
+
 // GetMFAConfig returns multi-factor authentication config
 func GetMFAConfig() mfa.Config {
 	return globalConf.MFAConfig
@@ -635,7 +645,6 @@ func getRedactedGlobalConf() globalConfig {
 	conf.Common.StartupHook = util.GetRedactedURL(conf.Common.StartupHook)
 	conf.Common.PostConnectHook = util.GetRedactedURL(conf.Common.PostConnectHook)
 	conf.Common.PostDisconnectHook = util.GetRedactedURL(conf.Common.PostDisconnectHook)
-	conf.Common.DataRetentionHook = util.GetRedactedURL(conf.Common.DataRetentionHook)
 	conf.SFTPD.KeyboardInteractiveHook = util.GetRedactedURL(conf.SFTPD.KeyboardInteractiveHook)
 	conf.HTTPDConfig.SigningPassphrase = getRedactedPassword(conf.HTTPDConfig.SigningPassphrase)
 	conf.HTTPDConfig.Setup.InstallationCode = getRedactedPassword(conf.HTTPDConfig.Setup.InstallationCode)
@@ -652,6 +661,7 @@ func getRedactedGlobalConf() globalConfig {
 		binding.OIDC.ClientSecret = getRedactedPassword(binding.OIDC.ClientSecret)
 		conf.HTTPDConfig.Bindings = append(conf.HTTPDConfig.Bindings, binding)
 	}
+	conf.KMSConfig.Secrets.MasterKeyString = getRedactedPassword(conf.KMSConfig.Secrets.MasterKeyString)
 	conf.PluginsConfig = nil
 	for _, plugin := range globalConf.PluginsConfig {
 		var args []string
@@ -1587,6 +1597,12 @@ func getHTTPDSecurityConfFromEnv(idx int) (httpd.SecurityConf, bool) { //nolint:
 		isSet = true
 	}
 
+	referredPolicy, ok := os.LookupEnv(fmt.Sprintf("SFTPGO_HTTPD__BINDINGS__%v__SECURITY__REFERRER_POLICY", idx))
+	if ok {
+		result.ReferrerPolicy = referredPolicy
+		isSet = true
+	}
+
 	cacheControl, ok := os.LookupEnv(fmt.Sprintf("SFTPGO_HTTPD__BINDINGS__%v__SECURITY__CACHE_CONTROL", idx))
 	if ok {
 		result.CacheControl = cacheControl
@@ -2051,7 +2067,6 @@ func setViperDefaults() {
 	viper.SetDefault("common.proxy_skipped", globalConf.Common.ProxySkipped)
 	viper.SetDefault("common.post_connect_hook", globalConf.Common.PostConnectHook)
 	viper.SetDefault("common.post_disconnect_hook", globalConf.Common.PostDisconnectHook)
-	viper.SetDefault("common.data_retention_hook", globalConf.Common.DataRetentionHook)
 	viper.SetDefault("common.max_total_connections", globalConf.Common.MaxTotalConnections)
 	viper.SetDefault("common.max_per_host_connections", globalConf.Common.MaxPerHostConnections)
 	viper.SetDefault("common.allowlist_status", globalConf.Common.AllowListStatus)
@@ -2263,7 +2278,7 @@ func lookupStringListFromEnv(envName string) ([]string, bool) {
 	value, ok := os.LookupEnv(envName)
 	if ok {
 		var result []string
-		for _, v := range strings.Split(value, ",") {
+		for v := range strings.SplitSeq(value, ",") {
 			val := strings.TrimSpace(v)
 			if val != "" {
 				result = append(result, val)

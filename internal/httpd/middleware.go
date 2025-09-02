@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/go-chi/jwtauth/v5"
 	"github.com/rs/xid"
@@ -369,15 +370,22 @@ func checkNodeToken(tokenAuth *jwtauth.JWTAuth) func(next http.Handler) http.Han
 			if len(token) > 7 && strings.ToUpper(token[0:6]) == "BEARER" {
 				token = token[7:]
 			}
-			admin, role, err := dataprovider.AuthenticateNodeToken(token)
+			if invalidatedJWTTokens.Get(token) {
+				logger.Debug(logSender, "", "the node token has been invalidated")
+				sendAPIResponse(w, r, fmt.Errorf("the provided token is not valid"), "", http.StatusUnauthorized)
+				return
+			}
+			admin, role, perms, err := dataprovider.AuthenticateNodeToken(token)
 			if err != nil {
 				logger.Debug(logSender, "", "unable to authenticate node token %q: %v", token, err)
 				sendAPIResponse(w, r, fmt.Errorf("the provided token cannot be authenticated"), "", http.StatusUnauthorized)
 				return
 			}
+			defer invalidatedJWTTokens.Add(token, time.Now().Add(2*time.Minute).UTC())
+
 			c := jwtTokenClaims{
 				Username:    admin,
-				Permissions: []string{dataprovider.PermAdminViewConnections, dataprovider.PermAdminCloseConnections},
+				Permissions: perms,
 				NodeID:      dataprovider.GetNodeName(),
 				Role:        role,
 			}
@@ -417,7 +425,7 @@ func checkAPIKeyAuth(tokenAuth *jwtauth.JWTAuth, scope dataprovider.APIKeyScope)
 			k, err := dataprovider.APIKeyExists(keyID)
 			if err != nil {
 				handleDefenderEventLoginFailed(util.GetIPFromRemoteAddress(r.RemoteAddr), util.NewRecordNotFoundError("invalid api key")) //nolint:errcheck
-				logger.Debug(logSender, "invalid api key %q: %v", apiKey, err)
+				logger.Debug(logSender, "", "invalid api key %q: %v", apiKey, err)
 				sendAPIResponse(w, r, errors.New("the provided api key is not valid"), "", http.StatusBadRequest)
 				return
 			}
@@ -551,7 +559,7 @@ func authenticateUserWithAPIKey(username, keyID string, tokenAuth *jwtauth.JWTAu
 		return err
 	}
 	connectionID := fmt.Sprintf("%v_%v", protocol, xid.New().String())
-	if err := checkHTTPClientUser(&user, r, connectionID, true); err != nil {
+	if err := checkHTTPClientUser(&user, r, connectionID, true, false); err != nil {
 		updateLoginMetrics(&user, dataprovider.LoginMethodPassword, ipAddr, err, r)
 		return err
 	}

@@ -235,7 +235,7 @@ func ParseBytes(s string) (int64, error) {
 	lastDigit := 0
 	hasComma := false
 	for _, r := range s {
-		if !(unicode.IsDigit(r) || r == '.' || r == ',') {
+		if !unicode.IsDigit(r) && r != '.' && r != ',' {
 			break
 		}
 		if r == ',' {
@@ -246,7 +246,7 @@ func ParseBytes(s string) (int64, error) {
 
 	num := s[:lastDigit]
 	if hasComma {
-		num = strings.Replace(num, ",", "", -1)
+		num = strings.ReplaceAll(num, ",", "")
 	}
 
 	f, err := strconv.ParseFloat(num, 64)
@@ -489,10 +489,7 @@ func GetDirsForVirtualPath(virtualPath string) []string {
 		}
 	}
 	dirsForPath := []string{virtualPath}
-	for {
-		if virtualPath == "/" {
-			break
-		}
+	for virtualPath != "/" {
 		virtualPath = path.Dir(virtualPath)
 		dirsForPath = append(dirsForPath, virtualPath)
 	}
@@ -596,7 +593,7 @@ func HTTPListenAndServe(srv *http.Server, address string, port int, isTLS bool,
 			logger.Error(logSender, "", "error creating Unix-domain socket parent dir: %v", err)
 		}
 		os.Remove(address)
-		listener, err = newListener("unix", address, srv.ReadTimeout, srv.WriteTimeout)
+		listener, err = net.Listen("unix", address)
 		if err == nil {
 			// should a chmod err be fatal?
 			if errChmod := os.Chmod(address, 0770); errChmod != nil {
@@ -605,7 +602,7 @@ func HTTPListenAndServe(srv *http.Server, address string, port int, isTLS bool,
 		}
 	} else {
 		CheckTCP4Port(port)
-		listener, err = newListener("tcp", fmt.Sprintf("%s:%d", address, port), srv.ReadTimeout, srv.WriteTimeout)
+		listener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", address, port))
 	}
 	if err != nil {
 		return err
@@ -734,7 +731,7 @@ func GetRealIP(r *http.Request, header string, depth int) string {
 	var ipAddresses []string
 
 	for _, h := range r.Header.Values(header) {
-		for _, ipStr := range strings.Split(h, ",") {
+		for ipStr := range strings.SplitSeq(h, ",") {
 			ipStr = strings.TrimSpace(ipStr)
 			ipAddresses = append(ipAddresses, ipStr)
 		}

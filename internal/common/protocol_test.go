@@ -3784,8 +3784,8 @@ func TestEventRule(t *testing.T) {
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"test1@example.com", "test2@example.com"},
 				Bcc:        []string{"test3@example.com"},
-				Subject:    `New "{{Event}}" from "{{Name}}" status {{StatusString}}`,
-				Body:       "Fs path {{FsPath}}, size: {{FileSize}}, protocol: {{Protocol}}, IP: {{IP}} Data: {{ObjectData}} {{ErrorString}}",
+				Subject:    `New "{{.Event}}" from "{{.Name}}" status {{.StatusString}}`,
+				Body:       "Fs path {{.FsPath}}, size: {{.FileSize}}, protocol: {{.Protocol}}, IP: {{.IP}} Data: {{.ObjectData}} {{.ErrorString}}",
 			},
 		},
 	}
@@ -3795,8 +3795,8 @@ func TestEventRule(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"failure@example.com"},
-				Subject:    `Failed "{{Event}}" from "{{Name}}"`,
-				Body:       "Fs path {{FsPath}}, protocol: {{Protocol}}, IP: {{IP}} {{ErrorString}}",
+				Subject:    `Failed "{{.Event}}" from "{{.Name}}"`,
+				Body:       "Fs path {{.FsPath}}, protocol: {{.Protocol}}, IP: {{.IP}} {{.ErrorString}}",
 			},
 		},
 	}
@@ -3941,7 +3941,7 @@ func TestEventRule(t *testing.T) {
 			EnvVars: []dataprovider.KeyValue{
 				{
 					Key:   "SFTPGO_ACTION_PATH",
-					Value: "{{FsPath}}",
+					Value: "{{.FsPath}}",
 				},
 				{
 					Key:   "CUSTOM_ENV_VAR",
@@ -4050,7 +4050,7 @@ func TestEventRule(t *testing.T) {
 		assert.Contains(t, email.Data, fmt.Sprintf(`Subject: New "download" from "%s"`, user.Username))
 	}
 	// test upload action command with arguments
-	action1.Options.CmdConfig.Args = []string{"{{Event}}", "{{VirtualPath}}", "custom_arg"}
+	action1.Options.CmdConfig.Args = []string{"{{.Event}}", "{{.VirtualPath}}", "custom_arg"}
 	action1, _, err = httpdtest.UpdateEventAction(action1, http.StatusOK)
 	assert.NoError(t, err)
 	uploadLogFilePath := filepath.Join(os.TempDir(), "upload.log")
@@ -4128,8 +4128,8 @@ func TestEventRuleStatues(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"test6@example.com"},
-				Subject:    `New "{{Event}}" error`,
-				Body:       "{{ErrorString}}",
+				Subject:    `New "{{.Event}}" error`,
+				Body:       "{{.ErrorString}}",
 			},
 		},
 	}
@@ -4241,7 +4241,7 @@ func TestEventRuleDisabledCommand(t *testing.T) {
 				EnvVars: []dataprovider.KeyValue{
 					{
 						Key:   "SFTPGO_OBJECT_DATA",
-						Value: "{{ObjectData}}",
+						Value: "{{.ObjectData}}",
 					},
 				},
 			},
@@ -4253,8 +4253,8 @@ func TestEventRuleDisabledCommand(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"test3@example.com"},
-				Subject:    `New "{{Event}}" from "{{Name}}"`,
-				Body:       "Object name: {{ObjectName}} object type: {{ObjectType}} Data: {{ObjectData}}",
+				Subject:    `New "{{.Event}}" from "{{.Name}}"`,
+				Body:       "Object name: {{.ObjectName}} object type: {{.ObjectType}} Data: {{.ObjectData}}",
 			},
 		},
 	}
@@ -4265,8 +4265,8 @@ func TestEventRuleDisabledCommand(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"failure@example.com"},
-				Subject:    `Failed "{{Event}}" from "{{Name}}"`,
-				Body:       "Object name: {{ObjectName}} object type: {{ObjectType}}, IP: {{IP}}",
+				Subject:    `Failed "{{.Event}}" from "{{.Name}}"`,
+				Body:       "Object name: {{.ObjectName}} object type: {{.ObjectType}}, IP: {{.IP}}",
 			},
 		},
 	}
@@ -4390,7 +4390,7 @@ func TestEventRuleProviderEvents(t *testing.T) {
 				EnvVars: []dataprovider.KeyValue{
 					{
 						Key:   "SFTPGO_OBJECT_DATA",
-						Value: "{{ObjectData}}",
+						Value: "{{.ObjectData}}",
 					},
 				},
 			},
@@ -4402,8 +4402,8 @@ func TestEventRuleProviderEvents(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"test3@example.com"},
-				Subject:    `New "{{Event}}" from "{{Name}}"`,
-				Body:       "Object name: {{ObjectName}} object type: {{ObjectType}} Data: {{ObjectData}}",
+				Subject:    `New "{{.Event}}" from "{{.Name}}"`,
+				Body:       "Object name: {{.ObjectName}} object type: {{.ObjectType}} Data: {{.ObjectData}}",
 			},
 		},
 	}
@@ -4414,8 +4414,8 @@ func TestEventRuleProviderEvents(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"failure@example.com"},
-				Subject:    `Failed "{{Event}}" from "{{Name}}"`,
-				Body:       "Object name: {{ObjectName}} object type: {{ObjectType}}, IP: {{IP}}",
+				Subject:    `Failed "{{.Event}}" from "{{.Name}}"`,
+				Body:       "Object name: {{.ObjectName}} object type: {{.ObjectType}}, IP: {{.IP}}",
 			},
 		},
 	}
@@ -4561,8 +4561,8 @@ func TestEventRuleFsActions(t *testing.T) {
 				Renames: []dataprovider.RenameConfig{
 					{
 						KeyValue: dataprovider.KeyValue{
-							Key:   "/{{VirtualDirPath}}/{{ObjectName}}",
-							Value: "/{{ObjectName}}_renamed",
+							Key:   "/{{.VirtualDirPath}}/{{.ObjectName}}",
+							Value: "/{{.ObjectName}}_renamed",
 						},
 					},
 				},
@@ -4575,7 +4575,7 @@ func TestEventRuleFsActions(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			FsConfig: dataprovider.EventActionFilesystemConfig{
 				Type:    dataprovider.FilesystemActionDelete,
-				Deletes: []string{"/{{ObjectName}}_renamed"},
+				Deletes: []string{"/{{.ObjectName}}_renamed"},
 			},
 		},
 	}
@@ -4593,7 +4593,7 @@ func TestEventRuleFsActions(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			FsConfig: dataprovider.EventActionFilesystemConfig{
 				Type:  dataprovider.FilesystemActionExist,
-				Exist: []string{"/{{VirtualPath}}"},
+				Exist: []string{"/{{.VirtualPath}}"},
 			},
 		},
 	}
@@ -4831,8 +4831,8 @@ func TestEventActionObjectBaseName(t *testing.T) {
 				Renames: []dataprovider.RenameConfig{
 					{
 						KeyValue: dataprovider.KeyValue{
-							Key:   "/{{VirtualDirPath}}/{{ObjectName}}",
-							Value: "/{{ObjectBaseName}}",
+							Key:   "/{{.VirtualDirPath}}/{{.ObjectName}}",
+							Value: "/{{.ObjectBaseName}}",
 						},
 					},
 				},
@@ -4911,8 +4911,8 @@ func TestUploadEventRule(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"test1@example.com"},
-				Subject:    `New "{{Event}}" from "{{Name}}" status {{StatusString}}`,
-				Body:       "Fs path {{FsPath}}, size: {{FileSize}}, protocol: {{Protocol}}, IP: {{IP}} Data: {{ObjectData}} {{ErrorString}}",
+				Subject:    `New "{{.Event}}" from "{{.Name}}" status {{.StatusString}}`,
+				Body:       "Fs path {{.FsPath}}, size: {{.FileSize}}, protocol: {{.Protocol}}, IP: {{.IP}} Data: {{.ObjectData}} {{.ErrorString}}",
 			},
 		},
 	}
@@ -5047,8 +5047,8 @@ func TestEventRulePreDelete(t *testing.T) {
 				Renames: []dataprovider.RenameConfig{
 					{
 						KeyValue: dataprovider.KeyValue{
-							Key:   "/{{VirtualPath}}",
-							Value: fmt.Sprintf("/%s/{{VirtualPath}}", movePath),
+							Key:   "/{{.VirtualPath}}",
+							Value: fmt.Sprintf("/%s/{{.VirtualPath}}", movePath),
 						},
 						UpdateModTime: true,
 					},
@@ -5402,6 +5402,7 @@ func TestEventActionCommandEnvVars(t *testing.T) {
 }
 
 func TestFsActionCopy(t *testing.T) {
+	dirCopy := "/dircopy"
 	a1 := dataprovider.BaseEventAction{
 		Name: "a1",
 		Type: dataprovider.ActionTypeFilesystem,
@@ -5410,8 +5411,8 @@ func TestFsActionCopy(t *testing.T) {
 				Type: dataprovider.FilesystemActionCopy,
 				Copy: []dataprovider.KeyValue{
 					{
-						Key:   "/{{VirtualPath}}/",
-						Value: "/dircopy/",
+						Key:   "/{{.VirtualPath}}/",
+						Value: dirCopy + "/",
 					},
 				},
 			},
@@ -5441,7 +5442,29 @@ func TestFsActionCopy(t *testing.T) {
 	}
 	rule1, _, err := httpdtest.AddEventRule(r1, http.StatusCreated)
 	assert.NoError(t, err)
+	g1 := dataprovider.Group{
+		BaseGroup: sdk.BaseGroup{
+			Name: "group1",
+		},
+		UserSettings: dataprovider.GroupUserSettings{
+			BaseGroupUserSettings: sdk.BaseGroupUserSettings{
+				Permissions: map[string][]string{
+					// Restrict permissions in copyPath to check that action
+					// will have full permissions anyway.
+					dirCopy: {dataprovider.PermListItems, dataprovider.PermDelete},
+				},
+			},
+		},
+	}
+	group1, resp, err := httpdtest.AddGroup(g1, http.StatusCreated)
+	assert.NoError(t, err, string(resp))
 	u := getTestUser()
+	u.Groups = []sdk.GroupMapping{
+		{
+			Name: group1.Name,
+			Type: sdk.GroupTypePrimary,
+		},
+	}
 	user, _, err := httpdtest.AddUser(u, http.StatusCreated)
 	assert.NoError(t, err)
 	conn, client, err := getSftpClient(user)
@@ -5451,7 +5474,7 @@ func TestFsActionCopy(t *testing.T) {
 
 		err = writeSFTPFile(testFileName, 100, client)
 		assert.NoError(t, err)
-		_, err = client.Stat(path.Join("dircopy", testFileName))
+		_, err = client.Stat(path.Join(dirCopy, testFileName))
 		assert.NoError(t, err)
 
 		action1.Options.FsConfig.Copy = []dataprovider.KeyValue{
@@ -5474,6 +5497,8 @@ func TestFsActionCopy(t *testing.T) {
 	assert.NoError(t, err)
 	err = os.RemoveAll(user.GetHomeDir())
 	assert.NoError(t, err)
+	_, err = httpdtest.RemoveGroup(group1, http.StatusOK)
+	assert.NoError(t, err)
 }
 
 func TestEventFsActionsGroupFilters(t *testing.T) {
@@ -5492,8 +5517,8 @@ func TestEventFsActionsGroupFilters(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"example@example.net"},
-				Subject:    `New "{{Event}}" from "{{Name}}" status {{StatusString}}`,
-				Body:       "Fs path {{FsPath}}, size: {{FileSize}}, protocol: {{Protocol}}, IP: {{IP}} {{ErrorString}}",
+				Subject:    `New "{{.Event}}" from "{{.Name}}" status {{.StatusString}}`,
+				Body:       "Fs path {{.FsPath}}, size: {{.FileSize}}, protocol: {{.Protocol}}, IP: {{.IP}} {{.ErrorString}}",
 			},
 		},
 	}
@@ -5623,8 +5648,8 @@ func TestEventProviderActionGroupFilters(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"example@example.net"},
-				Subject:    `New "{{Event}}" from "{{Name}}"`,
-				Body:       "IP: {{IP}}",
+				Subject:    `New "{{.Event}}" from "{{.Name}}"`,
+				Body:       "IP: {{.IP}}",
 			},
 		},
 	}
@@ -5759,9 +5784,9 @@ func TestBackupAsAttachment(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients:  []string{"test@example.com"},
-				Subject:     `"{{Event}} {{StatusString}}"`,
-				Body:        "Domain: {{Name}}",
-				Attachments: []string{"/{{VirtualPath}}"},
+				Subject:     `"{{.Event}} {{.StatusString}}"`,
+				Body:        "Domain: {{.Name}}",
+				Attachments: []string{"/{{.VirtualPath}}"},
 			},
 		},
 	}
@@ -5840,11 +5865,11 @@ func TestEventActionHTTPMultipart(t *testing.T) {
 								Value: "application/json",
 							},
 						},
-						Body: `{"FilePath": "{{VirtualPath}}"}`,
+						Body: `{"FilePath": "{{.VirtualPath}}"}`,
 					},
 					{
 						Name:     "file",
-						Filepath: "/{{VirtualPath}}",
+						Filepath: "/{{.VirtualPath}}",
 					},
 				},
 			},
@@ -5920,8 +5945,8 @@ func TestEventActionCompress(t *testing.T) {
 			FsConfig: dataprovider.EventActionFilesystemConfig{
 				Type: dataprovider.FilesystemActionCompress,
 				Compress: dataprovider.EventActionFsCompress{
-					Name:  "/{{VirtualPath}}.zip",
-					Paths: []string{"/{{VirtualPath}}"},
+					Name:  "/{{.VirtualPath}}.zip",
+					Paths: []string{"/{{.VirtualPath}}"},
 				},
 			},
 		},
@@ -6091,7 +6116,7 @@ func TestEventActionCompressQuotaErrors(t *testing.T) {
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"test@example.com"},
 				Subject:    `"Compress failed"`,
-				Body:       "Error: {{ErrorString}}",
+				Body:       "Error: {{.ErrorString}}",
 			},
 		},
 	}
@@ -6235,8 +6260,8 @@ func TestEventActionCompressQuotaFolder(t *testing.T) {
 			FsConfig: dataprovider.EventActionFilesystemConfig{
 				Type: dataprovider.FilesystemActionCompress,
 				Compress: dataprovider.EventActionFsCompress{
-					Name:  "/{{VirtualPath}}.zip",
-					Paths: []string{"/{{VirtualPath}}", testDir},
+					Name:  "/{{.VirtualPath}}.zip",
+					Paths: []string{"/{{.VirtualPath}}", testDir},
 				},
 			},
 		},
@@ -6361,8 +6386,8 @@ func TestEventActionCompressErrors(t *testing.T) {
 			FsConfig: dataprovider.EventActionFilesystemConfig{
 				Type: dataprovider.FilesystemActionCompress,
 				Compress: dataprovider.EventActionFsCompress{
-					Name:  "/{{VirtualPath}}.zip",
-					Paths: []string{"/{{VirtualPath}}.zip"}, // cannot compress itself
+					Name:  "/{{.VirtualPath}}.zip",
+					Paths: []string{"/{{.VirtualPath}}.zip"}, // cannot compress itself
 				},
 			},
 		},
@@ -6424,7 +6449,7 @@ func TestEventActionCompressErrors(t *testing.T) {
 	// try to overwrite a directory
 	testDir := "/adir"
 	action1.Options.FsConfig.Compress.Name = testDir
-	action1.Options.FsConfig.Compress.Paths = []string{"/{{VirtualPath}}"}
+	action1.Options.FsConfig.Compress.Paths = []string{"/{{.VirtualPath}}"}
 	_, _, err = httpdtest.UpdateEventAction(action1, http.StatusOK)
 	assert.NoError(t, err)
 	conn, client, err = getSftpClient(user)
@@ -6469,8 +6494,8 @@ func TestEventActionEmailAttachments(t *testing.T) {
 			FsConfig: dataprovider.EventActionFilesystemConfig{
 				Type: dataprovider.FilesystemActionCompress,
 				Compress: dataprovider.EventActionFsCompress{
-					Name:  "/archive/{{VirtualPath}}.zip",
-					Paths: []string{"/{{VirtualPath}}"},
+					Name:  "/archive/{{.VirtualPath}}.zip",
+					Paths: []string{"/{{.VirtualPath}}"},
 				},
 			},
 		},
@@ -6483,9 +6508,9 @@ func TestEventActionEmailAttachments(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients:  []string{"test@example.com"},
-				Subject:     `"{{Event}}" from "{{Name}}"`,
-				Body:        "Fs path {{FsPath}}, size: {{FileSize}}, protocol: {{Protocol}}, IP: {{IP}} {{EscapedVirtualPath}}",
-				Attachments: []string{"/archive/{{VirtualPath}}.zip"},
+				Subject:     `"{{.Event}}" from "{{.Name}}"`,
+				Body:        "Fs path {{.FsPath}}, size: {{.FileSize}}, protocol: {{.Protocol}}, IP: {{.IP}} {{.EscapedVirtualPath}}",
+				Attachments: []string{"/archive/{{.VirtualPath}}.zip"},
 			},
 		},
 	}
@@ -6604,8 +6629,8 @@ func TestEventActionsRetentionReports(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients:  []string{"test@example.com"},
-				Subject:     `"{{Event}}" from "{{Name}}"`,
-				Body:        "Fs path {{FsPath}}, size: {{FileSize}}, protocol: {{Protocol}}, IP: {{IP}}",
+				Subject:     `"{{.Event}}" from "{{.Name}}"`,
+				Body:        "Fs path {{.FsPath}}, size: {{.FileSize}}, protocol: {{.Protocol}}, IP: {{.IP}}",
 				Attachments: []string{dataprovider.RetentionReportPlaceHolder},
 			},
 		},
@@ -6832,8 +6857,8 @@ func TestEventRuleFirstUploadDownloadActions(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"test@example.com"},
-				Subject:    `"{{Event}}" from "{{Name}}"`,
-				Body:       "Fs path {{FsPath}}, size: {{FileSize}}, protocol: {{Protocol}}, IP: {{IP}}",
+				Subject:    `"{{.Event}}" from "{{.Name}}"`,
+				Body:       "Fs path {{.FsPath}}, size: {{.FileSize}}, protocol: {{.Protocol}}, IP: {{.IP}}",
 			},
 		},
 	}
@@ -6964,9 +6989,9 @@ func TestEventRuleRenameEvent(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients:  []string{"test@example.com"},
-				Subject:     `"{{Event}}" from "{{Name}}"`,
+				Subject:     `"{{.Event}}" from "{{.Name}}"`,
 				ContentType: 1,
-				Body:        `<p>Fs path {{FsPath}}, Target path "{{VirtualTargetDirPath}}/{{TargetName}}", size: {{FileSize}}</p>`,
+				Body:        `<p>Fs path {{.FsPath}}, Name: {{.Name}}, Target path "{{.VirtualTargetDirPath}}/{{.TargetName}}", size: {{.FileSize}}</p>`,
 			},
 		},
 	}
@@ -6991,7 +7016,9 @@ func TestEventRuleRenameEvent(t *testing.T) {
 	rule1, _, err := httpdtest.AddEventRule(r1, http.StatusCreated)
 	assert.NoError(t, err)
 
-	user, _, err := httpdtest.AddUser(getTestUser(), http.StatusCreated)
+	u := getTestUser()
+	u.Username = "test <html > chars"
+	user, _, err := httpdtest.AddUser(u, http.StatusCreated)
 	assert.NoError(t, err)
 	conn, client, err := getSftpClient(user)
 	if assert.NoError(t, err) {
@@ -7015,6 +7042,7 @@ func TestEventRuleRenameEvent(t *testing.T) {
 		assert.Contains(t, email.Data, fmt.Sprintf(`Subject: "rename" from "%s"`, user.Username))
 		assert.Contains(t, email.Data, "Content-Type: text/html")
 		assert.Contains(t, email.Data, fmt.Sprintf("Target path %q", path.Join("/subdir", testFileName)))
+		assert.Contains(t, email.Data, "Name: test &lt;html &gt; chars,")
 	}
 
 	_, err = httpdtest.RemoveEventRule(rule1, http.StatusOK)
@@ -7045,9 +7073,9 @@ func TestEventRuleIDPLogin(t *testing.T) {
 	username := `test_"idp_"login`
 	custom1 := `cust"oa"1`
 	u := map[string]any{
-		"username": "{{Name}}",
+		"username": "{{.Name}}",
 		"status":   1,
-		"home_dir": filepath.Join(os.TempDir(), "{{IDPFieldcustom1}}"),
+		"home_dir": filepath.Join(os.TempDir(), "{{.IDPFieldcustom1}}"),
 		"permissions": map[string][]string{
 			"/": {dataprovider.PermAny},
 		},
@@ -7055,7 +7083,7 @@ func TestEventRuleIDPLogin(t *testing.T) {
 	userTmpl, err := json.Marshal(u)
 	require.NoError(t, err)
 	a := map[string]any{
-		"username":    "{{Name}}",
+		"username":    "{{.Name}}",
 		"status":      1,
 		"permissions": []string{dataprovider.PermAdminAny},
 	}
@@ -7081,8 +7109,8 @@ func TestEventRuleIDPLogin(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"test@example.com"},
-				Subject:    `"{{Event}} {{StatusString}}"`,
-				Body:       "{{Name}} Custom field: {{IDPFieldcustom1}}",
+				Subject:    `"{{.Event}} {{.StatusString}}"`,
+				Body:       "{{.Name}} Custom field: {{.IDPFieldcustom1}}",
 			},
 		},
 	}
@@ -7327,8 +7355,8 @@ func TestEventRuleEmailField(t *testing.T) {
 		Type: dataprovider.ActionTypeEmail,
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
-				Recipients: []string{"{{Email}}"},
-				Subject:    `"{{Event}}" from "{{Name}}"`,
+				Recipients: []string{"{{.Email}}"},
+				Subject:    `"{{.Event}}" from "{{.Name}}"`,
 				Body:       "Sample email body",
 			},
 		},
@@ -7342,7 +7370,7 @@ func TestEventRuleEmailField(t *testing.T) {
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"failure@example.com"},
 				Subject:    `"Failure`,
-				Body:       "{{ErrorString}}",
+				Body:       "{{.ErrorString}}",
 			},
 		},
 	}
@@ -7473,9 +7501,9 @@ func TestEventRuleCertificate(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients:  []string{"test@example.com"},
-				Subject:     `"{{Event}} {{StatusString}}"`,
+				Subject:     `"{{.Event}} {{.StatusString}}"`,
 				ContentType: 0,
-				Body:        "Domain: {{Name}} Timestamp: {{Timestamp}} {{ErrorString}} Date time: {{DateTime}}",
+				Body:        "Domain: {{.Name}} Timestamp: {{.Timestamp}} {{.ErrorString}} Date time: {{.DateTime}}",
 			},
 		},
 	}
@@ -7613,8 +7641,8 @@ func TestEventRuleIPBlocked(t *testing.T) {
 		Options: dataprovider.BaseEventActionOptions{
 			EmailConfig: dataprovider.EventActionEmailConfig{
 				Recipients: []string{"test3@example.com", "test4@example.com"},
-				Subject:    `New "{{Event}}"`,
-				Body:       "IP: {{IP}} Timestamp: {{Timestamp}}",
+				Subject:    `New "{{.Event}}"`,
+				Body:       "IP: {{.IP}} Timestamp: {{.Timestamp}}",
 			},
 		},
 	}
@@ -8315,7 +8343,12 @@ func TestRetentionAPI(t *testing.T) {
 				DeleteEmptyDirs: true,
 			},
 		}
-		_, err = httpdtest.StartRetentionCheck(user.Username, folderRetention, http.StatusAccepted)
+		check := common.RetentionCheck{
+			Folders: folderRetention,
+		}
+		c := common.RetentionChecks.Add(check, &user)
+		assert.NotNil(t, c)
+		err = c.Start()
 		assert.NoError(t, err)
 
 		assert.Eventually(t, func() bool {
@@ -8328,7 +8361,7 @@ func TestRetentionAPI(t *testing.T) {
 		err = client.Chtimes(uploadPath, time.Now().Add(-48*time.Hour), time.Now().Add(-48*time.Hour))
 		assert.NoError(t, err)
 
-		_, err = httpdtest.StartRetentionCheck(user.Username, folderRetention, http.StatusAccepted)
+		err = c.Start()
 		assert.NoError(t, err)
 
 		assert.Eventually(t, func() bool {
@@ -8346,11 +8379,13 @@ func TestRetentionAPI(t *testing.T) {
 		err = writeSFTPFile(uploadPath, 32, client)
 		assert.NoError(t, err)
 
-		folderRetention[0].DeleteEmptyDirs = false
+		check.Folders[0].DeleteEmptyDirs = false
 		err = client.Chtimes(uploadPath, time.Now().Add(-48*time.Hour), time.Now().Add(-48*time.Hour))
 		assert.NoError(t, err)
 
-		_, err = httpdtest.StartRetentionCheck(user.Username, folderRetention, http.StatusAccepted)
+		c = common.RetentionChecks.Add(check, &user)
+		assert.NotNil(t, c)
+		err = c.Start()
 		assert.NoError(t, err)
 
 		assert.Eventually(t, func() bool {
@@ -8404,7 +8439,12 @@ func TestRetentionAPI(t *testing.T) {
 				Retention: 0,
 			},
 		}
-		_, err = httpdtest.StartRetentionCheck(user.Username, folderRetention, http.StatusAccepted)
+		check := common.RetentionCheck{
+			Folders: folderRetention,
+		}
+		c := common.RetentionChecks.Add(check, &user)
+		assert.NotNil(t, c)
+		err = c.Start()
 		assert.NoError(t, err)
 
 		assert.Eventually(t, func() bool {
@@ -8425,7 +8465,12 @@ func TestRetentionAPI(t *testing.T) {
 			},
 		}
 
-		_, err = httpdtest.StartRetentionCheck(user.Username, folderRetention, http.StatusAccepted)
+		check = common.RetentionCheck{
+			Folders: folderRetention,
+		}
+		c = common.RetentionChecks.Add(check, &user)
+		assert.NotNil(t, c)
+		err = c.Start()
 		assert.NoError(t, err)
 
 		assert.Eventually(t, func() bool {
@@ -8459,8 +8504,13 @@ func TestRetentionAPI(t *testing.T) {
 			},
 		}
 
-		_, err = httpdtest.StartRetentionCheck(user.Username, folderRetention, http.StatusAccepted)
-		assert.NoError(t, err)
+		check := common.RetentionCheck{
+			Folders: folderRetention,
+		}
+		c := common.RetentionChecks.Add(check, &user)
+		assert.NotNil(t, c)
+		err = c.Start()
+		assert.ErrorIs(t, err, os.ErrPermission)
 
 		assert.Eventually(t, func() bool {
 			return len(common.RetentionChecks.Get("")) == 0
@@ -8469,8 +8519,10 @@ func TestRetentionAPI(t *testing.T) {
 		err = os.Chmod(dirPath, 0555)
 		assert.NoError(t, err)
 
-		_, err = httpdtest.StartRetentionCheck(user.Username, folderRetention, http.StatusAccepted)
-		assert.NoError(t, err)
+		c = common.RetentionChecks.Add(check, &user)
+		assert.NotNil(t, c)
+		err = c.Start()
+		assert.ErrorIs(t, err, os.ErrPermission)
 
 		assert.Eventually(t, func() bool {
 			return len(common.RetentionChecks.Get("")) == 0
@@ -8479,7 +8531,12 @@ func TestRetentionAPI(t *testing.T) {
 		err = os.Chmod(dirPath, os.ModePerm)
 		assert.NoError(t, err)
 
-		_, err = httpdtest.StartRetentionCheck(user.Username, folderRetention, http.StatusAccepted)
+		check = common.RetentionCheck{
+			Folders: folderRetention,
+		}
+		c = common.RetentionChecks.Add(check, &user)
+		assert.NotNil(t, c)
+		err = c.Start()
 		assert.NoError(t, err)
 
 		assert.Eventually(t, func() bool {

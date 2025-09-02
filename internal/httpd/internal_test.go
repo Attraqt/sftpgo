@@ -1175,46 +1175,6 @@ func TestUpdateWebAdminInvalidClaims(t *testing.T) {
 	assert.Contains(t, rr.Body.String(), util.I18nErrorInvalidToken)
 }
 
-func TestRetentionInvalidTokenClaims(t *testing.T) {
-	username := "retentionuser"
-	user := dataprovider.User{
-		BaseUser: sdk.BaseUser{
-			Username: username,
-			Password: "pwd",
-			HomeDir:  filepath.Join(os.TempDir(), username),
-			Status:   1,
-		},
-	}
-	user.Permissions = make(map[string][]string)
-	user.Permissions["/"] = []string{dataprovider.PermAny}
-	user.Filters.AllowAPIKeyAuth = true
-	err := dataprovider.AddUser(&user, "", "", "")
-	assert.NoError(t, err)
-	folderRetention := []dataprovider.FolderRetention{
-		{
-			Path:            "/",
-			Retention:       0,
-			DeleteEmptyDirs: true,
-		},
-	}
-	asJSON, err := json.Marshal(folderRetention)
-	assert.NoError(t, err)
-	req, _ := http.NewRequest(http.MethodPost, retentionBasePath+"/"+username+"/check?notifications=Email", bytes.NewBuffer(asJSON))
-
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("username", username)
-
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-	req = req.WithContext(context.WithValue(req.Context(), jwtauth.ErrorCtxKey, errors.New("error")))
-	rr := httptest.NewRecorder()
-	startRetentionCheck(rr, req)
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Invalid token claims")
-
-	err = dataprovider.DeleteUser(username, "", "", "")
-	assert.NoError(t, err)
-}
-
 func TestUpdateSMTPSecrets(t *testing.T) {
 	currentConfigs := &dataprovider.SMTPConfigs{
 		OAuth2: dataprovider.SMTPOAuth2{
@@ -2395,8 +2355,57 @@ func TestDbTokenManager(t *testing.T) {
 	dbTokenManager.Cleanup()
 	isInvalidated = dbTokenManager.Get(testToken)
 	assert.True(t, isInvalidated)
-	err := dataprovider.DeleteSharedSession(key)
+	err := dataprovider.DeleteSharedSession(key, dataprovider.SessionTypeInvalidToken)
 	assert.NoError(t, err)
+}
+
+func TestDatabaseSharedSessions(t *testing.T) {
+	if !isSharedProviderSupported() {
+		t.Skip("this test it is not available with this provider")
+	}
+	session1 := dataprovider.Session{
+		Key:       "1",
+		Data:      map[string]string{"a": "b"},
+		Type:      dataprovider.SessionTypeOIDCAuth,
+		Timestamp: 10,
+	}
+	err := dataprovider.AddSharedSession(session1)
+	assert.NoError(t, err)
+	// Adding another session with the same key but a different type should work
+	session2 := session1
+	session2.Type = dataprovider.SessionTypeOIDCToken
+	err = dataprovider.AddSharedSession(session2)
+	assert.NoError(t, err)
+	err = dataprovider.DeleteSharedSession(session1.Key, dataprovider.SessionTypeInvalidToken)
+	assert.ErrorIs(t, err, util.ErrNotFound)
+	_, err = dataprovider.GetSharedSession(session1.Key, dataprovider.SessionTypeResetCode)
+	assert.ErrorIs(t, err, util.ErrNotFound)
+	session1Get, err := dataprovider.GetSharedSession(session1.Key, dataprovider.SessionTypeOIDCAuth)
+	assert.NoError(t, err)
+	assert.Equal(t, session1.Timestamp, session1Get.Timestamp)
+	var stored map[string]string
+	err = json.Unmarshal(session1Get.Data.([]byte), &stored)
+	assert.NoError(t, err)
+	assert.Equal(t, session1.Data, stored)
+	session1.Timestamp = 20
+	session1.Data = map[string]string{"c": "d"}
+	err = dataprovider.AddSharedSession(session1)
+	assert.NoError(t, err)
+	session1Get, err = dataprovider.GetSharedSession(session1.Key, dataprovider.SessionTypeOIDCAuth)
+	assert.NoError(t, err)
+	assert.Equal(t, session1.Timestamp, session1Get.Timestamp)
+	stored = make(map[string]string)
+	err = json.Unmarshal(session1Get.Data.([]byte), &stored)
+	assert.NoError(t, err)
+	assert.Equal(t, session1.Data, stored)
+	err = dataprovider.DeleteSharedSession(session1.Key, dataprovider.SessionTypeOIDCAuth)
+	assert.NoError(t, err)
+	err = dataprovider.DeleteSharedSession(session2.Key, dataprovider.SessionTypeOIDCToken)
+	assert.NoError(t, err)
+	_, err = dataprovider.GetSharedSession(session1.Key, dataprovider.SessionTypeOIDCAuth)
+	assert.ErrorIs(t, err, util.ErrNotFound)
+	_, err = dataprovider.GetSharedSession(session2.Key, dataprovider.SessionTypeOIDCToken)
+	assert.ErrorIs(t, err, util.ErrNotFound)
 }
 
 func TestAllowedProxyUnixDomainSocket(t *testing.T) {
@@ -2677,10 +2686,11 @@ func TestCompressorAbortHandler(t *testing.T) {
 		assert.Equal(t, http.ErrAbortHandler, rcv)
 	}()
 
-	connection := &Connection{
-		BaseConnection: common.NewBaseConnection(xid.New().String(), common.ProtocolHTTP, "", "", dataprovider.User{}),
-		request:        nil,
-	}
+	connection := newConnection(
+		common.NewBaseConnection(xid.New().String(), common.ProtocolHTTP, "", "", dataprovider.User{}),
+		nil,
+		nil,
+	)
 	share := &dataprovider.Share{}
 	renderCompressedFiles(&failingWriter{}, connection, "", nil, share)
 }
@@ -2702,10 +2712,11 @@ func TestZipErrors(t *testing.T) {
 	}
 	user.Permissions = make(map[string][]string)
 	user.Permissions["/"] = []string{dataprovider.PermAny}
-	connection := &Connection{
-		BaseConnection: common.NewBaseConnection(xid.New().String(), common.ProtocolHTTP, "", "", user),
-		request:        nil,
-	}
+	connection := newConnection(
+		common.NewBaseConnection(xid.New().String(), common.ProtocolHTTP, "", "", user),
+		nil,
+		nil,
+	)
 
 	testDir := filepath.Join(os.TempDir(), "testDir")
 	err := os.MkdirAll(testDir, os.ModePerm)
@@ -2926,10 +2937,11 @@ func TestConnection(t *testing.T) {
 	}
 	user.Permissions = make(map[string][]string)
 	user.Permissions["/"] = []string{dataprovider.PermAny}
-	connection := &Connection{
-		BaseConnection: common.NewBaseConnection(xid.New().String(), common.ProtocolHTTP, "", "", user),
-		request:        nil,
-	}
+	connection := newConnection(
+		common.NewBaseConnection(xid.New().String(), common.ProtocolHTTP, "", "", user),
+		nil,
+		nil,
+	)
 	assert.Empty(t, connection.GetClientVersion())
 	assert.Empty(t, connection.GetRemoteAddress())
 	assert.Empty(t, connection.GetCommand())
@@ -2950,10 +2962,11 @@ func TestGetFileWriterErrors(t *testing.T) {
 	}
 	user.Permissions = make(map[string][]string)
 	user.Permissions["/"] = []string{dataprovider.PermAny}
-	connection := &Connection{
-		BaseConnection: common.NewBaseConnection(xid.New().String(), common.ProtocolHTTP, "", "", user),
-		request:        nil,
-	}
+	connection := newConnection(
+		common.NewBaseConnection(xid.New().String(), common.ProtocolHTTP, "", "", user),
+		nil,
+		nil,
+	)
 	_, err := connection.getFileWriter("name")
 	assert.Error(t, err)
 
@@ -2966,10 +2979,11 @@ func TestGetFileWriterErrors(t *testing.T) {
 		},
 		AccessSecret: kms.NewPlainSecret("secret"),
 	}
-	connection = &Connection{
-		BaseConnection: common.NewBaseConnection(xid.New().String(), common.ProtocolHTTP, "", "", user),
-		request:        nil,
-	}
+	connection = newConnection(
+		common.NewBaseConnection(xid.New().String(), common.ProtocolHTTP, "", "", user),
+		nil,
+		nil,
+	)
 	_, err = connection.getFileWriter("/path")
 	assert.Error(t, err)
 }
@@ -2998,9 +3012,11 @@ func TestHTTPDFile(t *testing.T) {
 	}
 	user.Permissions = make(map[string][]string)
 	user.Permissions["/"] = []string{dataprovider.PermAny}
-	connection := &Connection{
-		BaseConnection: common.NewBaseConnection(xid.New().String(), common.ProtocolHTTP, "", "", user),
-	}
+	connection := newConnection(
+		common.NewBaseConnection(xid.New().String(), common.ProtocolHTTP, "", "", user),
+		nil,
+		nil,
+	)
 
 	fs, err := user.GetFilesystem("")
 	assert.NoError(t, err)
@@ -3397,6 +3413,7 @@ func TestSecureMiddlewareIntegration(t *testing.T) {
 				CrossOriginOpenerPolicy:   "same-origin",
 				CrossOriginResourcePolicy: "same-site",
 				CrossOriginEmbedderPolicy: "require-corp",
+				ReferrerPolicy:            "no-referrer",
 			},
 		},
 		enableWebAdmin:  true,
@@ -3454,6 +3471,7 @@ func TestSecureMiddlewareIntegration(t *testing.T) {
 	assert.Equal(t, "require-corp", rr.Header().Get("Cross-Origin-Embedder-Policy"))
 	assert.Equal(t, "same-origin", rr.Header().Get("Cross-Origin-Opener-Policy"))
 	assert.Equal(t, "same-site", rr.Header().Get("Cross-Origin-Resource-Policy"))
+	assert.Equal(t, "no-referrer", rr.Header().Get("Referrer-Policy"))
 
 	server.binding.Security.Enabled = false
 	server.binding.Security.updateProxyHeaders()
